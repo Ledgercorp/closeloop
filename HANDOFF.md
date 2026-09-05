@@ -76,6 +76,22 @@ documentation call was made in this session. `HACKATHON_REQUIREMENTS.md` records
 official-documentation and submission-evidence gate; the existing CloseLoop constraints remain
 higher authority.
 
+Post-initialization verification commands:
+
+```bash
+npx -y @amazon-devices/amazon-devices-buildertools-mcp@latest check-status
+npx -y @amazon-devices/amazon-devices-buildertools-mcp@latest exec --list
+```
+
+`check-status` detected Codex, context document v4.0 at the repository `AGENTS.md`, and a configured
+MCP entry in `/Users/colbyweiss/.codex/config.toml`; Codex was the one fully configured agent. The
+read-only tool inventory launched successfully and returned nine tools. The MCP server is therefore
+configured and launchable. Because this Codex task began before the global configuration changed,
+native MCP tools require a newly started Codex session; the CLI inventory was used for the current
+process. The official inventory also requires `list_documents(documentType="WORKFLOW")` before
+future Amazon implementation/setup/test/build/deploy/submit workflows, which is now recorded in
+`HACKATHON_REQUIREMENTS.md`.
+
 ## Baseline reproduced before changes
 
 The authoritative starting point was a clean `main` branch at `2810fd0` with `HEAD`, `main`, and

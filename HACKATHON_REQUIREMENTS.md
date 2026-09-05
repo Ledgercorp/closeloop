@@ -47,6 +47,9 @@ Before any later Alexa+ implementation or final submission:
 
 - use the official Builder Tools MCP documentation tools with an explicit supported platform
   decision where the tool requires one;
+- call `list_documents` with `documentType="WORKFLOW"` before using Builder Tools for an Amazon
+  implementation, setup, configuration, test, build, deployment, or submission task, then follow
+  any applicable official workflow before consulting knowledge-base documents;
 - verify the then-current Alexa+, Amazon Devices API, MCP transport/version, and submission rules;
 - record document identifiers, dates, and any resulting requirement changes here or in the
   friction log;
