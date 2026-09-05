@@ -284,8 +284,10 @@ class ResolutionService:
             consumer_state = None
             verdict = None
 
+        conversation = ResolutionService._conversation_view(record)
         return {
             "resolution_id": record.resolution_id,
+            "task": record.intent,
             "action": "cancel_subscription",
             "intent": record.intent,
             "execution_environment": "demo_simulation",
@@ -295,6 +297,7 @@ class ResolutionService:
             "confirmation_required": record.state is LifecycleState.AWAITING_CONFIRMATION,
             "consumer_state": consumer_state,
             "verdict": verdict,
+            **conversation,
             "explanation": explanation,
             "created_at": _isoformat(record.created_at),
             "updated_at": _isoformat(record.updated_at),
@@ -306,12 +309,15 @@ class ResolutionService:
         receipt = record.execution_claim
         evidence = record.independent_evidence
         verification = record.verification
+        conversation = ResolutionService._conversation_view(record)
         return {
             "resolution_id": record.resolution_id,
+            "task": record.intent,
             "action": "cancel_subscription",
             "execution_environment": "demo_simulation",
             "provider_mode": record.provider_mode,
             "lifecycle_state": record.state.value,
+            **conversation,
             "execution_claim": (
                 {
                     "evidence_type": "execution_claim",
@@ -355,4 +361,60 @@ class ResolutionService:
                 }
                 for transition in record.state_history
             ],
+        }
+
+    @staticmethod
+    def _conversation_view(record: ResolutionRecord) -> dict[str, object]:
+        if record.state in {
+            LifecycleState.REQUESTED,
+            LifecycleState.AWAITING_CONFIRMATION,
+        }:
+            execution_status = "not_started"
+        elif record.state is LifecycleState.EXECUTING:
+            execution_status = "in_progress"
+        else:
+            execution_status = "completed"
+
+        if record.verification is not None:
+            verification_status = record.verification.verdict.value
+            consumer_state = record.verification.consumer_state.value
+            evidence_summary = record.verification.reason
+            recommended_next_step = {
+                ResolutionVerdict.PASS: "No further action is required.",
+                ResolutionVerdict.FAIL: (
+                    "Report that the task was not completed; start a new resolution only if "
+                    "the customer asks to retry."
+                ),
+                ResolutionVerdict.INCONCLUSIVE: (
+                    "Report that proof is unavailable and offer to check status or evidence later."
+                ),
+            }[record.verification.verdict]
+        elif record.state is LifecycleState.VERIFYING:
+            verification_status = "in_progress"
+            consumer_state = None
+            evidence_summary = (
+                "Execution evidence is recorded; independent verification is still in progress."
+            )
+            recommended_next_step = "Use get_resolution_status to check for a terminal result."
+        elif record.state is LifecycleState.EXECUTING:
+            verification_status = "not_started"
+            consumer_state = None
+            evidence_summary = "Execution is in progress; no independent verdict exists yet."
+            recommended_next_step = "Use get_resolution_status before reporting completion."
+        else:
+            verification_status = "not_started"
+            consumer_state = None
+            evidence_summary = (
+                "No execution or verification evidence exists because confirmation is pending."
+            )
+            recommended_next_step = (
+                "Obtain explicit customer confirmation before calling confirm_resolution_action."
+            )
+
+        return {
+            "execution_status": execution_status,
+            "verification_status": verification_status,
+            "consumer_state": consumer_state,
+            "evidence_summary": evidence_summary,
+            "recommended_next_step": recommended_next_step,
         }

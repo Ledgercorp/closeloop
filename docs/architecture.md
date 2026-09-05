@@ -75,3 +75,28 @@ read-back, verifier result, identifiers, UTC timestamps, and terminal outcome. O
 is terminal, its update predicate fails closed and the repository reports an immutable-outcome
 error. Schema creation is currently idempotent at startup; versioned production migrations remain
 a later operational hardening task.
+
+## Milestone 4 Alexa+ compatibility boundary
+
+The existing service remains a self-hosted Streamable HTTP MCP server. Alexa+-specific adaptation
+is kept at the contract edge:
+
+```text
+Alexa+/MCP client -> protected-resource discovery -> bearer-authenticated /mcp
+                                                     |
+                         closed input/output schemas + five tools
+                                                     |
+                    lifecycle service -> deterministic verifier
+                                                     |
+             structured result + generated text fallback + ui:// proof card
+```
+
+The server negotiates MCP `2025-11-25` and `2025-03-26`, returns conversation-ready execution,
+verification, evidence-summary, and next-step data, and never scripts Alexa's spoken response.
+Four tools reference a single read-only MCP Apps resource; the open-resolution list remains a pure
+data tool. The card cannot call tools or write state.
+
+The HTTP adapter exposes both the SDK path-suffixed protected-resource metadata endpoint and the
+root alias documented by Alexa+. It removes the unsupported challenge only from unauthenticated
+`/mcp` 401 responses. It does not implement an OAuth authorization server or claim to provide
+Alexa+ account linking. Those remain external prerequisites for live onboarding.

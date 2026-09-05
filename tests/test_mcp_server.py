@@ -2,6 +2,7 @@ import asyncio
 import time
 
 import jwt
+import pytest
 from fastapi.testclient import TestClient
 from mcp import Client
 from mcp.server.auth.settings import AuthSettings
@@ -59,11 +60,15 @@ def bearer_token(subject: str, scope: str = REQUIRED_SCOPE) -> str:
     )
 
 
-def protocol_headers(subject: str | None = None, scope: str = REQUIRED_SCOPE):
+def protocol_headers(
+    subject: str | None = None,
+    scope: str = REQUIRED_SCOPE,
+    protocol_version: str = "2025-11-25",
+):
     headers = {
         "Accept": "application/json, text/event-stream",
         "Content-Type": "application/json",
-        "MCP-Protocol-Version": "2025-11-25",
+        "MCP-Protocol-Version": protocol_version,
     }
     if subject:
         headers["Authorization"] = f"Bearer {bearer_token(subject, scope)}"
@@ -164,7 +169,8 @@ def test_mcp_rejects_direct_verdict_override_without_executing(tmp_path):
     asyncio.run(attempt_override())
 
 
-def test_streamable_http_requires_auth_and_negotiates_protocol(tmp_path):
+@pytest.mark.parametrize("protocol_version", ["2025-11-25", "2025-03-26"])
+def test_streamable_http_requires_auth_and_negotiates_protocol(tmp_path, protocol_version):
     settings, verifier = make_auth()
     app = create_app(make_service(tmp_path), settings, verifier)
     initialize = {
@@ -172,31 +178,54 @@ def test_streamable_http_requires_auth_and_negotiates_protocol(tmp_path):
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-11-25",
+            "protocolVersion": protocol_version,
             "capabilities": {},
             "clientInfo": {"name": "closeloop-test", "version": "1.0"},
         },
     }
     with TestClient(app) as client:
-        unauthorized = client.post("/mcp", headers=protocol_headers(), json=initialize)
+        unauthorized = client.post(
+            "/mcp",
+            headers=protocol_headers(protocol_version=protocol_version),
+            json=initialize,
+        )
         assert unauthorized.status_code == 401
+        assert "www-authenticate" not in unauthorized.headers
+
+        invalid_token = client.post(
+            "/mcp",
+            headers={
+                **protocol_headers(protocol_version=protocol_version),
+                "Authorization": "Bearer invalid-token",
+            },
+            json=initialize,
+        )
+        assert invalid_token.status_code == 401
+        assert "www-authenticate" not in invalid_token.headers
 
         insufficient_scope = client.post(
             "/mcp",
-            headers=protocol_headers("principal-a", scope="unrelated:scope"),
+            headers=protocol_headers(
+                "principal-a",
+                scope="unrelated:scope",
+                protocol_version=protocol_version,
+            ),
             json=initialize,
         )
         assert insufficient_scope.status_code == 403
+        assert "insufficient_scope" in insufficient_scope.headers["www-authenticate"]
 
         response = client.post(
-            "/mcp", headers=protocol_headers("principal-a"), json=initialize
+            "/mcp",
+            headers=protocol_headers("principal-a", protocol_version=protocol_version),
+            json=initialize,
         )
         assert response.status_code == 200
-        assert response.json()["result"]["protocolVersion"] == "2025-11-25"
+        assert response.json()["result"]["protocolVersion"] == protocol_version
 
         list_response = client.post(
             "/mcp",
-            headers=protocol_headers("principal-a"),
+            headers=protocol_headers("principal-a", protocol_version=protocol_version),
             json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
         )
         tool_names = {tool["name"] for tool in list_response.json()["result"]["tools"]}
@@ -213,6 +242,7 @@ def test_mcp_authorization_isolates_principals(tmp_path):
         )
         resolution_id = started_response.json()["result"]["structuredContent"]["resolution_id"]
 
+        unauthorized_text = None
         for request_id, tool_name, arguments in (
             (2, "get_resolution_status", {"resolution_id": resolution_id}),
             (3, "get_resolution_evidence", {"resolution_id": resolution_id}),
@@ -225,6 +255,18 @@ def test_mcp_authorization_isolates_principals(tmp_path):
             rejected = call_tool(client, "principal-b", request_id, tool_name, arguments)
             assert rejected.status_code == 200
             assert rejected.json()["result"]["isError"] is True
+            content_text = rejected.json()["result"]["content"][0]["text"]
+            assert "Resolution is unavailable" in content_text
+            unauthorized_text = unauthorized_text or content_text
+
+        missing = call_tool(
+            client,
+            "principal-b",
+            8,
+            "get_resolution_status",
+            {"resolution_id": "missing"},
+        )
+        assert missing.json()["result"]["content"][0]["text"] == unauthorized_text
 
         other_list = call_tool(client, "principal-b", 5, "list_open_resolutions", {})
         assert other_list.json()["result"]["structuredContent"]["resolutions"] == []
@@ -275,3 +317,22 @@ def test_fastapi_vercel_baseline_remains_valid(tmp_path):
     assert root.json()["status"] == "ok"
     assert health.status_code == 200
     assert health.json() == {"status": "healthy"}
+
+
+def test_alexa_root_and_sdk_protected_resource_metadata_are_available(tmp_path):
+    settings, verifier = make_auth()
+    app = create_app(make_service(tmp_path), settings, verifier)
+    with TestClient(app) as client:
+        alexa_metadata = client.get("/.well-known/oauth-protected-resource")
+        sdk_metadata = client.get("/.well-known/oauth-protected-resource/mcp")
+
+    assert alexa_metadata.status_code == 200
+    assert alexa_metadata.json() == {
+        "resource": AUDIENCE,
+        "authorization_servers": [ISSUER],
+        "scopes_supported": [REQUIRED_SCOPE],
+        "bearer_methods_supported": ["header"],
+    }
+    assert sdk_metadata.status_code == 200
+    assert sdk_metadata.json()["resource"] == AUDIENCE
+    assert sdk_metadata.json()["authorization_servers"] == [ISSUER]

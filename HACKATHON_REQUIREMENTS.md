@@ -26,6 +26,60 @@ Engineering target:
 
 If official documentation changes, update this file and implementation together. Do not silently ship a transport/version that is no longer eligible.
 
+## Alexa+ MCP Toolkit requirements verified for Milestone 4
+
+The following requirements were re-verified against the official Alexa+ Builder documentation on
+2026-09-05. These Alexa+-specific sources, rather than the Amazon Devices Vega/Fire OS context,
+govern this milestone:
+
+- [MCP QuickStart](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-quickstart.html)
+- [MCP Toolkit Overview](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html)
+- [MCP Client and App Lifecycle](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-client-lifecycle.html)
+- [Tools, Schema, and Data Design](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-addon-tools-schema-data-design.html)
+- [Authentication](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-authentication.html)
+- [Account Linking](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-account-linking.html)
+- [Test MCP Add-ons](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-test-add-ons.html)
+- [Local Inspector](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-local-inspector.html)
+- [Alexa AI CLI](https://developer.amazon.com/docs/alexaplus/add-ons/alexa-ai-cli-reference.html)
+
+Verified requirements and differences from the Milestone 3 assumptions:
+
+- Alexa+ for Builders explicitly supports MCP `2025-11-25` over Streamable HTTP. The client
+  lifecycle page still shows a `2025-03-26` initialize example, so CloseLoop must negotiate both
+  through the MCP SDK rather than hard-code one client version.
+- The MCP endpoint must be remotely reachable over HTTPS. A local server may be exposed through a
+  tunnel during development; a Vercel deployment protected by Vercel SSO is not Alexa-reachable.
+- Alexa+ requires unauthenticated discovery to return HTTP 401 without a `WWW-Authenticate` header.
+  The MCP server must publish RFC 9728 protected-resource metadata, and the authorization server
+  must publish OAuth authorization-server metadata.
+- Protected discovery uses service-level client credentials. User-specific tools and write actions
+  require OAuth 2.1 Authorization Code with PKCE S256, the canonical MCP `resource` parameter,
+  bearer tokens only in the `Authorization` header, and refresh-token issuance. Dynamic Client
+  Registration, Client ID Metadata Documents, OpenID Connect, step-up authorization, and a
+  `WWW-Authenticate` challenge are not currently supported by the Alexa+ MCP Toolkit.
+- CloseLoop's Milestone 3 HS256 verifier is only a resource-server boundary. It is not an OAuth
+  authorization server and does not by itself satisfy Alexa+ account linking or service-level
+  discovery. Do not treat locally minted test JWTs as Alexa+ credentials.
+- Tool names, descriptions, input schemas, and output schemas are promises to Alexa. Each tool must
+  map to one meaningful customer intent, every parameter must be used, errors must always return
+  useful data, and declared and returned output fields must remain synchronized.
+- Alexa+ composes spoken and visual responses from MCP data. CloseLoop must return complete text and
+  structured data; it must not script Alexa's words.
+- MCP Apps are supported through `_meta.ui.resourceUri` pointing to a `ui://` resource served as
+  `text/html;profile=mcp-app`. UI-enabled tools still require a meaningful text/data fallback.
+- The documented server-side latency target is under 500 ms round trip.
+- Isolated validation uses standard MCP Inspector operations (`initialize`, `tools/list`, valid and
+  invalid `tools/call`, repeat/idempotency checks, and trace export). The Alexa+ Local Inspector can
+  perform data-layer checks without a UI and visual checks for `ui://` resources. End-to-end web
+  simulator or physical-device testing requires an add-on deployed to the development stage.
+- The Alexa AI CLI and Local Inspector require Node.js 24+. Alexa+ MCP Toolkit access is currently
+  limited to selected partners. The official CLI, inspector, and Add-on Agent Skill are distributed
+  through private AWS CodeArtifact/CodeCommit access granted to approved partners.
+- An add-on manifest requires US distribution, an HTTPS MCP endpoint, store descriptions and
+  example phrases, public privacy-policy and terms URLs, six light icon sizes, and at least one
+  600x900 carousel image. Alexa+ refreshes tool/resource registration only when the add-on is
+  redeployed.
+
 ## Official Amazon Builder Tools context
 
 The official Amazon Devices Builder Tools MCP context was initialized on 2026-09-05 with:

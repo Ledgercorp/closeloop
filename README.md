@@ -21,12 +21,16 @@ The flagship demo is subscription cancellation. A simulated provider can report 
 ## Repository status
 
 This repository contains the deterministic resolution core, fault-injection demo provider,
-and a narrow MCP action lifecycle for subscription cancellation. The MCP service requires
+and an Alexa+-oriented MCP action lifecycle for subscription cancellation. The MCP service requires
 explicit confirmation before execution, records the provider claim separately from an
 independent read-back, and exposes only read access to the verifier's terminal result.
 
-The provider remains a clearly labeled in-process demo simulation. Alexa+ client integration,
-AWS orchestration, final UI work, and additional provider categories remain deferred.
+Milestone 4 adds closed conversation-ready output schemas, Alexa-compatible protected-resource
+discovery behavior, and a minimal read-only MCP Apps proof card. Standard MCP Inspector validation
+is complete. Live Alexa+ onboarding remains deferred because this environment lacks selected-partner
+Alexa AI CLI credentials, an Alexa-reachable HTTPS deployment, and an OAuth authorization server.
+The provider remains a clearly labeled in-process demo simulation; AWS orchestration, final UI work,
+and additional provider categories remain deferred.
 
 Milestone 3 adds durable SQLite/PostgreSQL resolution storage, optimistic cross-instance
 transitions, immutable terminal outcomes, and owner isolation derived from authenticated bearer
@@ -46,8 +50,8 @@ uv run --no-editable uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 The health endpoints remain at `/` and `/health`. The MCP service uses Streamable HTTP at
-`/mcp` and supports the required `2025-11-25` protocol negotiation through the official MCP
-Python SDK. For a non-local host, set `CLOSELOOP_ALLOWED_HOSTS`; set
+`/mcp` and negotiates both Alexa's required `2025-11-25` version and the `2025-03-26` lifecycle
+example through the official MCP Python SDK. For a non-local host, set `CLOSELOOP_ALLOWED_HOSTS`; set
 `CLOSELOOP_ALLOWED_ORIGINS` when browser origins must be permitted. Both variables accept
 comma-separated exact values. Vercel's `VERCEL_URL` is trusted automatically.
 
@@ -57,6 +61,11 @@ PostgreSQL database. MCP requests also fail closed unless `CLOSELOOP_AUTH_SECRET
 32 bytes. Configure `CLOSELOOP_AUTH_ISSUER` and `CLOSELOOP_AUTH_AUDIENCE` to match the external
 token issuer. Tokens must use HS256, contain `iss`, `aud`, `sub`, `iat`, and `exp`, and include
 the `closeloop:resolutions` scope. Health routes remain unauthenticated.
+
+This JWT configuration is a resource-server boundary, not Alexa+ account linking. A live add-on
+still requires a compatible external OAuth 2.1 authorization server, public HTTPS endpoint, and
+Alexa+ developer onboarding. The minimal proof card imports the official MCP Apps client from a
+pinned CDN URL; its protocol/resource contract is tested, but it has not been rendered by Alexa.
 
 ## Design rule
 

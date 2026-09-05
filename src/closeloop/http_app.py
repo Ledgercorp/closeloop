@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
@@ -57,9 +57,20 @@ def create_app(
     )
     app = FastAPI(
         title="CloseLoop",
-        version="0.3.0",
+        version="0.4.0",
         lifespan=mcp_http_app.router.lifespan_context,
     )
+
+    @app.middleware("http")
+    async def alexa_unauthenticated_discovery(request: Request, call_next):
+        response = await call_next(request)
+        if (
+            request.url.path.rstrip("/") == "/mcp"
+            and response.status_code == 401
+            and "www-authenticate" in response.headers
+        ):
+            del response.headers["www-authenticate"]
+        return response
 
     @app.get("/")
     def root() -> dict[str, str]:
@@ -72,6 +83,17 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "healthy"}
+
+    @app.get("/.well-known/oauth-protected-resource")
+    def alexa_protected_resource_metadata() -> dict[str, object]:
+        """Publish the root metadata alias documented by the Alexa+ MCP Toolkit."""
+
+        return {
+            "resource": str(auth_settings.resource_server_url),
+            "authorization_servers": [str(auth_settings.issuer_url).rstrip("/")],
+            "scopes_supported": list(auth_settings.required_scopes or []),
+            "bearer_methods_supported": ["header"],
+        }
 
     # Mount the complete MCP ASGI app so its authentication middleware remains
     # in the request path; copying only its routes would discard that boundary.

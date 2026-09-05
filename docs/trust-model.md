@@ -73,3 +73,14 @@ Provider-reported success is never sufficient for PASS.
   a consequential action.
 - A row whose stored state is terminal cannot be updated, even if a caller presents an older or
   fabricated in-memory state.
+
+## Alexa+ and proof-card boundary
+
+- Alexa+ may choose when to call a disclosed tool and may compose voice/screen language from the
+  returned data; it cannot provide, replace, or override a verifier result.
+- Conversation fields such as `evidence_summary` and `recommended_next_step` are derived views of
+  authoritative lifecycle/evidence state. They do not create or mutate that state.
+- The MCP Apps proof card is read-only. It receives a tool result, renders escaped text through
+  `textContent`, exposes no mutation control, and has no verdict-write or tool-call path.
+- Protected-resource metadata describes the resource-server boundary only. It is not proof of an
+  Alexa+ authorization server, account-linking flow, authenticated Alexa client, or live add-on.
