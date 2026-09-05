@@ -1,17 +1,4 @@
-from fastapi import FastAPI
-
-app = FastAPI(title="CloseLoop", version="0.1.0")
+from closeloop.http_app import create_app
 
 
-@app.get("/")
-def root():
-    return {
-        "name": "CloseLoop",
-        "status": "ok",
-        "message": "CloseLoop verification service is live.",
-    }
-
-
-@app.get("/health")
-def health():
-    return {"status": "healthy"}
+app = create_app()

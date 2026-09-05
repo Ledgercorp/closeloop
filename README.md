@@ -20,13 +20,32 @@ The flagship demo is subscription cancellation. A simulated provider can report 
 
 ## Repository status
 
-This repository currently contains the deterministic resolution core, fault-injection demo provider, tests, build provenance, judging map, friction log, and architecture plan. Alexa+ MCP and AWS AgentCore integrations are intentionally the next milestone.
+This repository contains the deterministic resolution core, fault-injection demo provider,
+and a narrow MCP action lifecycle for subscription cancellation. The MCP service requires
+explicit confirmation before execution, records the provider claim separately from an
+independent read-back, and exposes only read access to the verifier's terminal result.
 
-## Run the current core
+The provider remains a clearly labeled in-process demo simulation. Alexa+ client integration,
+durable shared storage, and AWS orchestration are intentionally deferred beyond Milestone 2.
+
+## Install and test
 
 ```bash
-python -m pytest -q
+uv sync --extra test --no-editable
+uv run --no-editable pytest -q
 ```
+
+## Run the service
+
+```bash
+uv run --no-editable uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+The health endpoints remain at `/` and `/health`. The MCP service uses Streamable HTTP at
+`/mcp` and supports the required `2025-11-25` protocol negotiation through the official MCP
+Python SDK. For a non-local host, set `CLOSELOOP_ALLOWED_HOSTS`; set
+`CLOSELOOP_ALLOWED_ORIGINS` when browser origins must be permitted. Both variables accept
+comma-separated exact values. Vercel's `VERCEL_URL` is trusted automatically.
 
 ## Design rule
 

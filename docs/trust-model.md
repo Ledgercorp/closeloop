@@ -47,3 +47,15 @@ INCONCLUSIVE when:
 - evidence is incomplete
 
 Provider-reported success is never sufficient for PASS.
+
+## MCP enforcement
+
+- The public MCP surface contains no verdict-write tool.
+- Generated tool schemas reject undeclared fields, including attempted verdict/status
+  overrides, before a handler runs.
+- The confirmation tool can move a resolution into execution but cannot choose its terminal
+  state.
+- Execution receipts and independent read-back observations are stored as different evidence
+  record types with source, identifier, and timestamp provenance.
+- Only the deterministic verifier result maps a resolution to `VERIFIED`, `NOT_COMPLETED`,
+  or `AWAITING_PROOF`.
