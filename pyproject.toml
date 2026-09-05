@@ -3,6 +3,12 @@ name = "closeloop"
 version = "0.1.0"
 description = "Verified-resolution core for the CloseLoop Alexa+ hackathon project"
 requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+]
+
+[tool.vercel]
+entrypoint = "main:app"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
