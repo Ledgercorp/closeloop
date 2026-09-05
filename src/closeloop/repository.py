@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import NoReturn
@@ -20,7 +19,7 @@ from sqlalchemy import (
     select,
     update,
 )
-from sqlalchemy.engine import Engine, RowMapping
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.pool import NullPool
 
@@ -34,16 +33,14 @@ from .lifecycle import (
     ResolutionRecord,
     ResolutionRepository,
     ResolutionStorageUnavailableError,
-    StateTransition,
     TerminalOutcomeImmutableError,
     allowed_previous_states,
 )
-from .models import (
-    ActionReceipt,
-    CancellationEvidence,
-    ConsumerState,
-    ResolutionVerdict,
-    VerificationResult,
+from .repository_contract import (
+    record_from_mapping,
+    record_to_mapping,
+    validate_new_record,
+    validate_target_record,
 )
 
 
@@ -68,22 +65,6 @@ _resolutions = Table(
     Column("state_history", JSON, nullable=False),
     Column("version", Integer, nullable=False),
 )
-
-
-def _utc(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _iso(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _parse_time(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
 class SqlResolutionRepository:
@@ -116,10 +97,10 @@ class SqlResolutionRepository:
 
     def create(self, record: ResolutionRecord) -> None:
         self._ensure_schema()
-        self._validate_new_record(record)
+        validate_new_record(record)
         try:
             with self._engine.begin() as connection:
-                connection.execute(insert(_resolutions).values(**self._record_values(record)))
+                connection.execute(insert(_resolutions).values(**record_to_mapping(record)))
         except IntegrityError as exc:
             raise ResolutionError(f"resolution already exists: {record.resolution_id}") from exc
         except SQLAlchemyError as exc:
@@ -139,14 +120,18 @@ class SqlResolutionRepository:
             raise ResolutionStorageUnavailableError("durable resolution storage failed") from exc
         if row is None:
             raise ResolutionNotFoundError(f"unknown resolution: {resolution_id}")
-        return self._record_from_row(row)
+        return record_from_mapping(row)
 
     def save_owned(self, record: ResolutionRecord, expected_version: int) -> None:
         self._ensure_schema()
+        if record.version != expected_version:
+            raise ConcurrentResolutionUpdateError(
+                f"resolution version does not match expected version: {record.resolution_id}"
+            )
         terminal_values = [state.value for state in TERMINAL_STATES]
         predecessor_values = [state.value for state in allowed_previous_states(record.state)]
         next_version = expected_version + 1
-        values = self._record_values(record)
+        values = record_to_mapping(record)
         values["version"] = next_version
         try:
             with self._engine.begin() as connection:
@@ -172,7 +157,7 @@ class SqlResolutionRepository:
                     raise InvalidTransitionError(
                         f"transition {current['state']} -> {record.state.value} is not allowed"
                     )
-                self._validate_target_record(record)
+                validate_target_record(record)
                 result = connection.execute(
                     update(_resolutions)
                     .where(
@@ -210,98 +195,7 @@ class SqlResolutionRepository:
                 ).mappings().all()
         except SQLAlchemyError as exc:
             raise ResolutionStorageUnavailableError("durable resolution storage failed") from exc
-        return [self._record_from_row(row) for row in rows]
-
-    @staticmethod
-    def _validate_new_record(record: ResolutionRecord) -> None:
-        if not record.owner_id.strip():
-            raise InvalidTransitionError("new resolution requires an authenticated owner")
-        if record.state is not LifecycleState.AWAITING_CONFIRMATION or record.version != 0:
-            raise InvalidTransitionError(
-                "new resolution must begin in AWAITING_CONFIRMATION at version zero"
-            )
-        if [item.state for item in record.state_history] != [
-            LifecycleState.REQUESTED,
-            LifecycleState.AWAITING_CONFIRMATION,
-        ]:
-            raise InvalidTransitionError("new resolution has invalid state history")
-        SqlResolutionRepository._validate_target_record(record)
-
-    @staticmethod
-    def _validate_target_record(record: ResolutionRecord) -> None:
-        if not record.state_history or record.state_history[-1].state is not record.state:
-            raise InvalidTransitionError("state history does not match current state")
-        if record.state is LifecycleState.AWAITING_CONFIRMATION:
-            if any(
-                value is not None
-                for value in (
-                    record.confirmed_at,
-                    record.execution_claim,
-                    record.execution_claim_observed_at,
-                    record.independent_evidence,
-                    record.independent_evidence_observed_at,
-                    record.verification,
-                    record.verified_at,
-                )
-            ):
-                raise InvalidTransitionError(
-                    "unconfirmed resolution cannot contain execution or verifier evidence"
-                )
-            return
-        if record.confirmed_at is None:
-            raise InvalidTransitionError("execution requires persisted explicit confirmation")
-        if record.state is LifecycleState.EXECUTING:
-            if any(
-                value is not None
-                for value in (
-                    record.execution_claim,
-                    record.execution_claim_observed_at,
-                    record.independent_evidence,
-                    record.independent_evidence_observed_at,
-                    record.verification,
-                    record.verified_at,
-                )
-            ):
-                raise InvalidTransitionError("executing resolution cannot contain later evidence")
-            return
-        if record.execution_claim is None or record.execution_claim_observed_at is None:
-            raise InvalidTransitionError("verification requires persisted execution evidence")
-        if record.state is LifecycleState.VERIFYING:
-            if any(
-                value is not None
-                for value in (
-                    record.independent_evidence,
-                    record.independent_evidence_observed_at,
-                    record.verification,
-                    record.verified_at,
-                )
-            ):
-                raise InvalidTransitionError(
-                    "verifying resolution cannot contain a terminal verifier result"
-                )
-            return
-        if record.state in TERMINAL_STATES:
-            if (
-                record.independent_evidence is None
-                or record.independent_evidence_observed_at is None
-                or record.verification is None
-                or record.verified_at is None
-            ):
-                raise InvalidTransitionError("terminal state requires complete verifier evidence")
-            expected_state = {
-                ResolutionVerdict.PASS: LifecycleState.VERIFIED,
-                ResolutionVerdict.FAIL: LifecycleState.NOT_COMPLETED,
-                ResolutionVerdict.INCONCLUSIVE: LifecycleState.AWAITING_PROOF,
-            }[record.verification.verdict]
-            if record.state is not expected_state:
-                raise InvalidTransitionError("terminal state does not match verifier evidence")
-            if (
-                record.execution_claim != record.verification.action_receipt
-                or record.independent_evidence != record.verification.evidence
-            ):
-                raise InvalidTransitionError("terminal verifier inputs do not match stored evidence")
-            return
-        raise InvalidTransitionError(f"unsupported persisted state: {record.state.value}")
+        return [record_from_mapping(row) for row in rows]
 
     def _ensure_schema(self) -> None:
         if self._schema_ready:
@@ -317,101 +211,19 @@ class SqlResolutionRepository:
                 ) from exc
             self._schema_ready = True
 
-    @staticmethod
-    def _record_values(record: ResolutionRecord) -> dict[str, object]:
-        return {
-            "resolution_id": record.resolution_id,
-            "owner_id": record.owner_id,
-            "intent": record.intent,
-            "provider_mode": record.provider_mode,
-            "state": record.state.value,
-            "created_at": record.created_at,
-            "updated_at": record.updated_at,
-            "confirmed_at": record.confirmed_at,
-            "execution_claim": (
-                {
-                    "request_id": record.execution_claim.request_id,
-                    "provider_reported_success": record.execution_claim.provider_reported_success,
-                    "message": record.execution_claim.message,
-                }
-                if record.execution_claim
-                else None
-            ),
-            "execution_claim_observed_at": record.execution_claim_observed_at,
-            "independent_evidence": (
-                {
-                    "account_readable": record.independent_evidence.account_readable,
-                    "auto_renew": record.independent_evidence.auto_renew,
-                    "effective_end_date": record.independent_evidence.effective_end_date,
-                    "freshness_seconds": record.independent_evidence.freshness_seconds,
-                }
-                if record.independent_evidence
-                else None
-            ),
-            "independent_evidence_observed_at": record.independent_evidence_observed_at,
-            "verification": (
-                {
-                    "verdict": record.verification.verdict.value,
-                    "consumer_state": record.verification.consumer_state.value,
-                    "reason": record.verification.reason,
-                }
-                if record.verification
-                else None
-            ),
-            "verified_at": record.verified_at,
-            "state_history": [
-                {"state": item.state.value, "occurred_at": _iso(item.occurred_at)}
-                for item in record.state_history
-            ],
-            "version": record.version,
-        }
-
-    @staticmethod
-    def _record_from_row(row: RowMapping) -> ResolutionRecord:
-        receipt_data = row["execution_claim"]
-        evidence_data = row["independent_evidence"]
-        verification_data = row["verification"]
-        receipt = ActionReceipt(**receipt_data) if receipt_data else None
-        evidence = CancellationEvidence(**evidence_data) if evidence_data else None
-        verification = None
-        if verification_data:
-            if receipt is None or evidence is None:
-                raise ResolutionStorageUnavailableError("stored verifier evidence is incomplete")
-            verification = VerificationResult(
-                verdict=ResolutionVerdict(verification_data["verdict"]),
-                consumer_state=ConsumerState(verification_data["consumer_state"]),
-                reason=verification_data["reason"],
-                action_receipt=receipt,
-                evidence=evidence,
-            )
-        return ResolutionRecord(
-            resolution_id=row["resolution_id"],
-            owner_id=row["owner_id"],
-            intent=row["intent"],
-            provider_mode=row["provider_mode"],
-            state=LifecycleState(row["state"]),
-            created_at=_utc(row["created_at"]),
-            updated_at=_utc(row["updated_at"]),
-            confirmed_at=_utc(row["confirmed_at"]),
-            execution_claim=receipt,
-            execution_claim_observed_at=_utc(row["execution_claim_observed_at"]),
-            independent_evidence=evidence,
-            independent_evidence_observed_at=_utc(row["independent_evidence_observed_at"]),
-            verification=verification,
-            verified_at=_utc(row["verified_at"]),
-            state_history=[
-                StateTransition(LifecycleState(item["state"]), _parse_time(item["occurred_at"]))
-                for item in row["state_history"]
-            ],
-            version=row["version"],
-        )
-
 
 class UnavailableResolutionRepository:
+    def __init__(
+        self,
+        message: str = (
+            "CLOSELOOP_DYNAMODB_TABLE, CLOSELOOP_DATABASE_URL, or DATABASE_URL "
+            "is required in serverless environments"
+        ),
+    ) -> None:
+        self._message = message
+
     def _fail(self) -> NoReturn:
-        raise ResolutionStorageUnavailableError(
-            "CLOSELOOP_DATABASE_URL or DATABASE_URL is required in serverless environments"
-        )
+        raise ResolutionStorageUnavailableError(self._message)
 
     def create(self, record: ResolutionRecord) -> None:
         self._fail()
@@ -427,6 +239,19 @@ class UnavailableResolutionRepository:
 
 
 def create_repository_from_environment() -> ResolutionRepository:
+    dynamodb_table = os.getenv("CLOSELOOP_DYNAMODB_TABLE")
+    if dynamodb_table is not None:
+        if not dynamodb_table.strip():
+            return UnavailableResolutionRepository(
+                "CLOSELOOP_DYNAMODB_TABLE must be a non-empty table name"
+            )
+        from .dynamodb_repository import DynamoDbResolutionRepository
+
+        return DynamoDbResolutionRepository(
+            dynamodb_table,
+            region_name=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"),
+            endpoint_url=os.getenv("CLOSELOOP_DYNAMODB_ENDPOINT_URL"),
+        )
     database_url = (
         os.getenv("CLOSELOOP_DATABASE_URL")
         or os.getenv("DATABASE_URL")

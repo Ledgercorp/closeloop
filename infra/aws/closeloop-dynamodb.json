@@ -1,0 +1,46 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CloseLoop Milestone 5 durable resolution and evidence store",
+  "Parameters": {
+    "TableName": {
+      "Type": "String",
+      "Default": "closeloop-resolutions",
+      "MinLength": 3,
+      "Description": "Name of the single-region CloseLoop DynamoDB table"
+    }
+  },
+  "Resources": {
+    "ResolutionTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "TableName": { "Ref": "TableName" },
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          { "AttributeName": "owner_id", "AttributeType": "S" },
+          { "AttributeName": "resolution_id", "AttributeType": "S" }
+        ],
+        "KeySchema": [
+          { "AttributeName": "owner_id", "KeyType": "HASH" },
+          { "AttributeName": "resolution_id", "KeyType": "RANGE" }
+        ],
+        "SSESpecification": { "SSEEnabled": true },
+        "Tags": [
+          { "Key": "Project", "Value": "CloseLoop" },
+          { "Key": "Milestone", "Value": "5" }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "TableName": {
+      "Description": "Set this as CLOSELOOP_DYNAMODB_TABLE",
+      "Value": { "Ref": "ResolutionTable" }
+    },
+    "TableArn": {
+      "Description": "Scope the runtime IAM policy to this ARN",
+      "Value": { "Fn::GetAtt": ["ResolutionTable", "Arn"] }
+    }
+  }
+}

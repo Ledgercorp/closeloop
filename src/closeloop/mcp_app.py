@@ -75,7 +75,7 @@ PROOF_CARD_HTML = r"""<!doctype html>
       text("evidence", data.evidence_summary ?? data.explanation ?? "Evidence unavailable");
     };
 
-    const app = new App({ name: "CloseLoop Proof Card", version: "0.4.0" });
+    const app = new App({ name: "CloseLoop Proof Card", version: "0.5.0" });
     app.ontoolresult = (result) => render(result.structuredContent);
     app.onhostcontextchanged = (context) => {
       if (context.theme) applyDocumentTheme(context.theme);

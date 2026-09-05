@@ -100,3 +100,26 @@ The HTTP adapter exposes both the SDK path-suffixed protected-resource metadata 
 root alias documented by Alexa+. It removes the unsupported challenge only from unauthenticated
 `/mcp` 401 responses. It does not implement an OAuth authorization server or claim to provide
 Alexa+ account linking. Those remain external prerequisites for live onboarding.
+
+## Milestone 5 AWS persistence boundary
+
+DynamoDB is an optional alternative to the SQL repository and becomes authoritative when
+`CLOSELOOP_DYNAMODB_TABLE` is configured:
+
+```text
+authenticated owner -> lifecycle service -> shared invariant codec
+                                             |              |
+                                      SQL repository   DynamoDB repository
+                                                       consistent reads
+                                                       conditional PutItem
+```
+
+One single-region, on-demand table uses `owner_id` as the partition key and `resolution_id` as the
+sort key. Every transition is a complete conditional write guarded by the expected version and an
+allowed predecessor state. This keeps confirmation, evidence provenance, terminal immutability,
+and deterministic-verdict correspondence inside the durable boundary across server instances.
+
+No AWS orchestration or model service was added. The current lifecycle is synchronous and already
+has an MCP runtime, authenticated tool boundary, and deterministic verifier. DynamoDB supplies the
+missing shared serverless state capability; additional AWS control planes would add complexity
+without a current consumer benefit.

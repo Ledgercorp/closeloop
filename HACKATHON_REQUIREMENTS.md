@@ -126,10 +126,64 @@ Forbidden:
 ## AWS Builder strategy
 AWS usage must be meaningful, not decorative.
 
-Planned candidates for later milestones include:
-- Amazon Bedrock for planning/reasoning where appropriate
-- Strands SDK for orchestration where appropriate
-- AgentCore Gateway / Policy / related AgentCore services where they materially improve execution, identity, policy, or observability
+## AWS Builder requirements verified for Milestone 5
+
+The following requirements were re-verified against current official sources on 2026-09-05:
+
+- [Official hackathon rules](https://amazonappdev2026.devpost.com/rules)
+- [Official hackathon resources](https://amazonappdev2026.devpost.com/resources)
+- [DynamoDB item operations and conditional writes](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html)
+- [DynamoDB optimistic version control](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BestPractices_ImplementingVersionControl.html)
+- [DynamoDB on-demand capacity](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/on-demand-capacity-mode.html)
+- [DynamoDB core key design](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html)
+- [DynamoDB Query API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html)
+- [DynamoDB encryption](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/encryption.usagenotes.html)
+- [DynamoDB constraints](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html)
+- [DynamoDB least-privilege policy guidance](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/using-identity-based-policies.html)
+- [CloudFormation DynamoDB table reference](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html)
+- [AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agents-tools-runtime.html)
+- [AgentCore Policy concepts](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy-core-concepts.html)
+- [Strands tool model](https://strandsagents.com/docs/user-guide/concepts/tools/)
+- [EventBridge overview](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-what-is.html)
+
+Verified findings:
+
+- The AWS Builder mini-challenge accepts a primary-track entry that incorporates AWS services and
+  documents the integrations. The rules list Bedrock, AgentCore, Strands, Kiro Crew, SageMaker,
+  and other services as examples, not mandatory components.
+- Stage 1 checks for reasonable SDK/API use. Stage 2 weights technical implementation, design,
+  potential impact, and idea quality equally. The judging examples contrast a basic storage or
+  single-model call with a creative multi-service pipeline, but do not require unnecessary
+  services. CloseLoop therefore optimizes for a genuine product responsibility rather than raw
+  service count.
+- The submission must describe which AWS services were used and how. A factual friction log can
+  earn a bonus under the current rules.
+- DynamoDB is meaningful here because it becomes the authoritative shared state and evidence
+  boundary. Conditional writes atomically enforce optimistic versions and allowed predecessor
+  states, while owner partition keys and strongly consistent table reads preserve isolation.
+- A composite `owner_id` partition key plus `resolution_id` sort key identifies each record and
+  supports owner-scoped queries. Query filtering occurs after reads and query pages can return a
+  `LastEvaluatedKey`, so the implementation paginates all owner records, removes terminal records,
+  sorts by `created_at`, and then applies the API limit.
+- DynamoDB's maximum item size is 400 KB. CloseLoop uses a conservative 350 KiB serialized bound
+  and fails safely before a write when a record is too large.
+- `PAY_PER_REQUEST` is AWS's recommended mode for most variable/serverless workloads. It avoids
+  provisioned idle throughput, but request and storage charges can still apply; the project does
+  not call it unconditionally free.
+- DynamoDB encrypts data at rest and in transit. The template explicitly enables server-side
+  encryption, uses one Region, and adds no global table, stream, secondary index, or running
+  compute.
+- AgentCore can host MCP/agent workloads and AgentCore Policy can govern Gateway calls. Strands
+  offers model-driven tool orchestration, while EventBridge routes asynchronous events. None adds
+  a current product capability to CloseLoop's already hosted, synchronous five-tool lifecycle.
+  Bedrock, AgentCore, Strands, Lambda, Step Functions, and EventBridge are therefore intentionally
+  excluded from Milestone 5 rather than added for optics.
+
+Milestone 5 implements one optional `DynamoDbResolutionRepository` plus a CloudFormation table
+template. When selected, DynamoDB is the system of record—not a duplicate audit copy—for complete
+resolution state, confirmation, execution claim, independent evidence, verifier result,
+timestamps, owner identity, state history, and optimistic version. The runtime identity needs only
+table-scoped `dynamodb:GetItem`, `dynamodb:PutItem`, and `dynamodb:Query`.
 
 Important: no model or orchestration layer may replace the deterministic verifier as the final source of truth.
 

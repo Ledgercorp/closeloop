@@ -25,12 +25,19 @@ and an Alexa+-oriented MCP action lifecycle for subscription cancellation. The M
 explicit confirmation before execution, records the provider claim separately from an
 independent read-back, and exposes only read access to the verifier's terminal result.
 
+Milestone 5 adds an optional Amazon DynamoDB repository as the authoritative shared store for
+owner-scoped lifecycle state and evidence. Atomic conditional writes preserve confirmation,
+optimistic concurrency, and immutable terminal outcomes across server instances. A minimal
+CloudFormation template provisions one on-demand encrypted table; no AWS orchestration or model
+was added because it would not improve the current synchronous lifecycle.
+
 Milestone 4 adds closed conversation-ready output schemas, Alexa-compatible protected-resource
 discovery behavior, and a minimal read-only MCP Apps proof card. Standard MCP Inspector validation
 is complete. Live Alexa+ onboarding remains deferred because this environment lacks selected-partner
 Alexa AI CLI credentials, an Alexa-reachable HTTPS deployment, and an OAuth authorization server.
 The provider remains a clearly labeled in-process demo simulation; AWS orchestration, final UI work,
-and additional provider categories remain deferred.
+and additional provider categories remain deferred. The DynamoDB path is simulated with boto3 and
+Moto, not live-AWS verified.
 
 Milestone 3 adds durable SQLite/PostgreSQL resolution storage, optimistic cross-instance
 transitions, immutable terminal outcomes, and owner isolation derived from authenticated bearer
@@ -55,8 +62,11 @@ example through the official MCP Python SDK. For a non-local host, set `CLOSELOO
 `CLOSELOOP_ALLOWED_ORIGINS` when browser origins must be permitted. Both variables accept
 comma-separated exact values. Vercel's `VERCEL_URL` is trusted automatically.
 
-Local development defaults to `.closeloop/resolutions.db`. Serverless deployments fail closed
-unless one of `CLOSELOOP_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` provides a shared
+Local development defaults to `.closeloop/resolutions.db`. For AWS-backed state, provision
+`infra/aws/closeloop-dynamodb.json`, then set `CLOSELOOP_DYNAMODB_TABLE` and `AWS_REGION` using the
+normal AWS SDK credential chain. An explicit DynamoDB table setting takes precedence over SQL URLs.
+See `docs/aws-dynamodb.md` for IAM, cost, and cleanup guidance. Other serverless deployments fail
+closed unless one of `CLOSELOOP_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` provides a shared
 PostgreSQL database. MCP requests also fail closed unless `CLOSELOOP_AUTH_SECRET` is at least
 32 bytes. Configure `CLOSELOOP_AUTH_ISSUER` and `CLOSELOOP_AUTH_AUDIENCE` to match the external
 token issuer. Tokens must use HS256, contain `iss`, `aud`, `sub`, `iat`, and `exp`, and include

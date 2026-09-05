@@ -84,3 +84,17 @@ Provider-reported success is never sufficient for PASS.
   `textContent`, exposes no mutation control, and has no verdict-write or tool-call path.
 - Protected-resource metadata describes the resource-server boundary only. It is not proof of an
   Alexa+ authorization server, account-linking flow, authenticated Alexa client, or live add-on.
+
+## AWS persistence boundary
+
+- DynamoDB may persist and return state and evidence; it does not calculate or select verdicts.
+- Every mutation is a conditional write over owner identity, resolution identity, optimistic
+  version, and allowed predecessor state. A diagnostic read after a rejected write cannot
+  authorize a retry or overwrite.
+- Strongly consistent owner-scoped reads prevent an eventually consistent view from being treated
+  as current verification state.
+- The runtime has no table deletion, scan, stream, index, orchestration, model, or verdict-write
+  permission/path.
+- AWS failures and corrupt records become storage-unavailable errors, never successful outcomes.
+- A crash after external execution may leave an in-progress record. CloseLoop does not claim
+  exactly-once recovery and must not blindly repeat the consequential action.

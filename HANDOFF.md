@@ -2,17 +2,213 @@
 
 ## Current phase
 
-Milestone 4 is complete at **local integration verification**. The existing durable,
-owner-scoped MCP server now exposes Alexa+-oriented closed response contracts, Alexa-compatible
-resource discovery behavior, and a minimal read-only MCP Apps proof-card resource. The
-deterministic verification core and all prior lifecycle semantics remain intact.
+Milestone 5 is complete at **SIMULATED AWS verification**. CloseLoop now has an optional Amazon
+DynamoDB repository that becomes the authoritative store for owner-scoped resolution state,
+confirmation, evidence provenance, lifecycle history, optimistic version, and immutable terminal
+outcome. The implementation uses boto3 against a single-region, on-demand table defined by
+CloudFormation. All prior MCP, Alexa+ compatibility, and deterministic verdict semantics remain
+intact.
 
-This is not live or simulator verification. The official Alexa AI CLI and Alexa+ Local Inspector
-could not be installed without selected-partner AWS package access, the developer console was not
-authenticated, the known deployments were missing or protected by Vercel SSO, and CloseLoop does
-not yet have the external OAuth authorization server required for Alexa+ account linking. No Alexa+
-add-on was created or deployed. AWS orchestration, final visual polish, additional provider
-categories, and Milestone 5 work were not started.
+No live AWS resource was provisioned. This host has no AWS CLI, profile, or AWS credential
+environment, and it lacks the Java 17 or Docker runtime required for official DynamoDB Local.
+Integration was therefore exercised with Moto and is accurately labeled **SIMULATED**, not live or
+AWS-native integration verified. No Bedrock, AgentCore, Strands, Lambda, Step Functions,
+EventBridge, model, or cloud-agent path was added. Final UI polish, adversarial testing, demo
+optimization, submission packaging, and Milestone 6 work were not started.
+
+## Implemented in Milestone 5
+
+- Added `DynamoDbResolutionRepository` as an optional backend selected by a nonblank
+  `CLOSELOOP_DYNAMODB_TABLE`. An explicit DynamoDB selection takes precedence over SQL URLs; a
+  blank explicit value fails closed.
+- Used `owner_id` as the partition key and `resolution_id` as the sort key. Runtime code never
+  creates infrastructure.
+- Preserved owner indistinguishability with composite-key `GetItem` calls and owner-partitioned
+  `Query` calls, both using `ConsistentRead=True`.
+- Made each transition one atomic conditional `PutItem` requiring the complete key, expected
+  numeric version, and an allowed stored predecessor state. A post-failure consistent read only
+  classifies the failure; it never authorizes a retry or overwrite.
+- Kept terminal states out of every allowed predecessor set, so persisted terminal outcomes remain
+  immutable. Record/version mismatches also fail before a write.
+- Extracted one shared SQL/DynamoDB codec and invariant validator. Persisted terminal state,
+  verdict, consumer state, execution claim, and independent evidence must all agree; malformed or
+  contradictory records fail as unavailable storage.
+- Added a conservative 350 KiB record bound below DynamoDB's 400 KB item limit.
+- Paginated complete owner partitions, removed terminal records, sorted open records by
+  `created_at`, and only then applied the existing result limit. This preserves SQL behavior while
+  documenting owner-history read cost.
+- Translated AWS credential, region, endpoint, authorization, throttling, missing-table,
+  validation, and internal SDK failures into the safe storage-unavailable contract.
+- Added `infra/aws/closeloop-dynamodb.json`: one `PAY_PER_REQUEST`, server-side-encrypted,
+  single-region DynamoDB table with no stream, index, provisioned capacity, or running compute.
+- Added deployment, least-privilege IAM, cost, cleanup, and recovery guidance in
+  `docs/aws-dynamodb.md`.
+- Kept exactly five MCP tools. There is still no verdict-write capability, and no AWS or cloud
+  response can calculate or override `PASS`, `FAIL`, or `INCONCLUSIVE`.
+- Updated application/package/proof-card versions to `0.5.0`.
+
+## Why the AWS integration is meaningful
+
+DynamoDB is not a mirrored log or hackathon-only call. When configured, it is the repository used
+for every lifecycle read and write and supplies the shared serverless durability/concurrency
+boundary CloseLoop previously lacked outside PostgreSQL. Conditional writes directly enforce
+confirmation ordering, optimistic concurrency, and terminal immutability across runtime instances.
+
+Current hackathon rules list AWS services as examples rather than mandating a specific stack.
+Bedrock/AgentCore/Strands and event/compute orchestration were intentionally excluded because the
+current lifecycle is synchronous and already has an MCP host, authentication boundary, and
+deterministic verifier. Adding another agent or control plane would not create a current consumer
+capability and could weaken the trust story.
+
+## Milestone 5 environment, provisioning, and cleanup
+
+Detected environment:
+
+- AWS CLI: **not installed**.
+- CloudFormation linter: **not installed**; no credentialed AWS-native validator was available.
+- AWS profiles/credentials and `AWS_*` variables: **absent**.
+- Docker: **not installed**.
+- Java command exists, but no usable JRE is installed; DynamoDB Local 2.6+ requires Java 17+.
+- boto3: `1.43.89`; Moto: `5.2.3`.
+- Live AWS resources created: **none**.
+- Resource identifiers: **none**.
+
+The unexecuted production deployment procedure is:
+
+```bash
+aws cloudformation deploy \
+  --stack-name closeloop-m5 \
+  --template-file infra/aws/closeloop-dynamodb.json \
+  --parameter-overrides TableName=closeloop-resolutions \
+  --region us-east-1
+export CLOSELOOP_DYNAMODB_TABLE=closeloop-resolutions
+export AWS_REGION=us-east-1
+```
+
+The runtime identity needs only table-scoped `dynamodb:GetItem`, `dynamodb:PutItem`, and
+`dynamodb:Query`. Credentials must come from the standard AWS SDK chain and must never be committed.
+
+Cleanup for a future deployed stack:
+
+```bash
+aws cloudformation delete-stack --stack-name closeloop-m5 --region us-east-1
+aws cloudformation wait stack-delete-complete --stack-name closeloop-m5 --region us-east-1
+```
+
+The checked-in stack deletes its table during stack deletion. It uses on-demand capacity and has
+no running compute, but DynamoDB request and storage charges vary by Region and usage; it is not
+represented as unconditionally free. AWS managed KMS charges may also apply to the explicitly
+enabled server-side encryption. This run incurred no AWS cost because it created no AWS
+resources.
+
+## Milestone 5 verification evidence
+
+Authoritative starting state:
+
+```bash
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+uv lock --check
+uv sync --locked --extra test --no-editable
+PYTHONPATH=src uv run --no-editable pytest -q
+```
+
+Results before changes: clean `main`; `HEAD` and `origin/main` both
+`f475f948370e19e9f93634439c074c6eb034cdf1`; dependency checks passed; `35 passed` with the one
+pre-existing Starlette/anyio deprecation warning.
+
+Final commands against the Milestone 5 diff:
+
+```bash
+uv lock --check
+uv sync --locked --extra test --no-editable
+PYTHONPATH=src uv run --no-editable python -m compileall -q src main.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_dynamodb_repository.py tests/test_aws_infrastructure.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_alexa_integration.py tests/test_mcp_server.py tests/test_resolution_lifecycle.py
+PYTHONPATH=src uv run --no-editable pytest -q
+python3 -m json.tool infra/aws/closeloop-dynamodb.json >/dev/null
+git diff --check
+```
+
+Results:
+
+- locked dependency resolution/sync: passed (`62` packages resolved; `57` checked);
+- source/Vercel entrypoint compilation: passed;
+- focused AWS repository/infrastructure suite: `22 passed`;
+- focused Alexa+/MCP/lifecycle regression suite: `22 passed`;
+- complete suite: `57 passed`;
+- CloudFormation JSON syntax and diff whitespace checks: passed;
+- AWS-native validation: unavailable because neither the AWS CLI nor `cfn-lint` is installed and
+  no AWS credentials are configured; this is not claimed as passed;
+- existing Starlette/anyio deprecation warning: unchanged and non-failing.
+
+AWS verification level: **SIMULATED**. Moto proves the boto3 repository's request and lifecycle
+contract locally, including restart/re-instantiation, all three outcomes, owner isolation,
+confirmation, provenance, terminal immutability, stale writers, pagination/order, consistent-read
+flags, conditional expressions, corrupt records, deterministic re-evaluation of stored terminal
+evidence, size limits, environment selection, and AWS error translation. It does not prove IAM,
+CloudFormation deployment, service availability, latency, regional behavior, or live DynamoDB
+semantics in an AWS account.
+
+The Development Governor classified the change as HIGH/CRITICAL because it crosses persistence,
+authorization, and serverless failure boundaries. Its pre-implementation architecture review
+approved the single-service design with conditional-write/consistent-read constraints. Its final
+review blocked completion after reproducing a corrupt stored `PASS` whose changed evidence was not
+re-evaluated. The shared terminal validator now calls the deterministic verifier and requires the
+entire stored result to match; four DynamoDB corruption cases plus a direct shared-codec regression
+test prove the correction. The reviewer found no other blocking issue.
+
+## Milestone 5 operational limitations
+
+- No live DynamoDB table or CloudFormation API was exercised, so AWS-native validation remains a
+  live-environment blocker rather than a completed claim.
+- Open-list queries paginate an owner's full history to preserve created-time ordering and strong
+  consistency. This is correct for the bounded demo but should be revisited for large histories.
+- The template intentionally omits point-in-time recovery for minimal demo cost. Production should
+  evaluate backup retention, alarms, and recovery objectives.
+- A conditional save before execution prevents stale instances from both starting an action, but
+  CloseLoop does not claim exactly-once completion. A crash after provider execution can leave a
+  truthful `EXECUTING` or `VERIFYING` record requiring later reconciliation.
+- Live Alexa+ onboarding blockers from Milestone 4 remain unchanged: partner tooling access,
+  supported Node, console authentication, public HTTPS hosting, and external OAuth 2.1 account
+  linking.
+
+## Milestone 5 changed repository files
+
+- `HACKATHON_REQUIREMENTS.md`
+- `HANDOFF.md`
+- `README.md`
+- `apps/mcp-server/README.md`
+- `docs/architecture.md`
+- `docs/aws-dynamodb.md`
+- `docs/build-provenance.md`
+- `docs/friction-log.md`
+- `docs/product-feedback.md`
+- `docs/trust-model.md`
+- `infra/aws/closeloop-dynamodb.json`
+- `pyproject.toml`
+- `src/closeloop/__init__.py`
+- `src/closeloop/dynamodb_repository.py`
+- `src/closeloop/http_app.py`
+- `src/closeloop/mcp_app.py`
+- `src/closeloop/mcp_server.py`
+- `src/closeloop/repository.py`
+- `src/closeloop/repository_contract.py`
+- `tests/test_aws_infrastructure.py`
+- `tests/test_dynamodb_repository.py`
+- `uv.lock`
+
+## Next recommended milestone
+
+Stop here before Milestone 6. After explicit approval and AWS credentials, deploy the checked-in
+stack in one Region, attach the documented least-privilege runtime policy, run the same lifecycle
+against the live table, validate CloudFormation, record cost/latency evidence, then delete the
+stack unless it is needed for a public demo deployment. Milestone 6 should also address the
+previously planned scope on its own authority; do not combine final UI, adversarial testing, demo
+optimization, or submission packaging into this completed milestone.
 
 ## Implemented in Milestone 4
 
@@ -355,7 +551,7 @@ discovery/read, and all three deterministic verdict/consumer-state mappings. It 
 Alexa+ client, Alexa+ Local Inspector, web simulator, physical device, public deployment, external
 OAuth authorization server, or live PostgreSQL.
 
-## Known limitations / blockers
+## Milestone 4 known limitations / blockers (historical)
 
 There are no blockers to the local Milestone 4 integration boundary. Live Alexa+ onboarding and
 verification remain blocked by:
@@ -389,7 +585,7 @@ Additional limitations are explicit:
 - On this macOS host, Python skips hidden editable-install `.pth` files, so the documented `uv`
   commands use `--no-editable` for deterministic local imports.
 
-## Next recommended step
+## Milestone 4 next recommended step (superseded by Milestone 5)
 
 Stop here before Milestone 5. After explicit approval, first obtain Alexa+ selected-partner access,
 upgrade Node.js, configure/authenticate the Alexa AI CLI, provide a public HTTPS deployment and

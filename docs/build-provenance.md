@@ -8,7 +8,7 @@ The creator previously developed CUF, a broader verification framework centered 
 
 ## CloseLoop boundary
 
-CloseLoop is a new, consumer-facing Alexa+-specific product. It is not a repackaging of CUF. The hackathon project introduces a new resolution lifecycle, Alexa+ MCP surface, consumer UX, first-party demo provider, fault-injection environment, AWS AgentCore integration plan, and a specific life-admin workflow.
+CloseLoop is a new, consumer-facing Alexa+-specific product. It is not a repackaging of CUF. The hackathon project introduces a new resolution lifecycle, Alexa+ MCP surface, consumer UX, first-party demo provider, fault-injection environment, optional AWS DynamoDB repository, and a specific life-admin workflow.
 
 ## Built for this hackathon
 
@@ -19,7 +19,7 @@ CloseLoop is a new, consumer-facing Alexa+-specific product. It is not a repacka
 - Consumer state mapping: Verified / Not completed / Awaiting proof
 - Fault-injection tests
 - Alexa+ integration plan
-- AWS Builder architecture plan
+- AWS DynamoDB state/evidence repository and infrastructure template
 - Judging rubric map
 - Friction log and product feedback templates
 
