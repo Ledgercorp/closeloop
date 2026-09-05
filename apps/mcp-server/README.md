@@ -16,6 +16,15 @@ newer versions supported by the official SDK). Consequential execution occurs on
 `confirm_resolution_action` after `confirmed=true`. Unexpected input fields are rejected,
 so callers cannot smuggle a verdict or terminal status into an action call.
 
-Milestone 2 storage is process-local and the provider is a labeled demo simulation. Durable
-cross-instance state, remote authentication/PKCE, Alexa+ client setup, and real provider
-execution remain later work. The deterministic verifier remains the sole verdict producer.
+Resolution state is durable through a SQL repository. Local development uses file-backed SQLite;
+Vercel/serverless execution requires a shared PostgreSQL URL. Version-checked conditional updates
+serialize competing instances, and repository updates cannot modify an existing terminal row.
+
+Every MCP request requires a validated bearer token with the `closeloop:resolutions` scope.
+Ownership is a hash of the validated issuer and subject; it is never an MCP argument. All reads,
+confirmation, evidence fetches, and open-resolution lists are scoped to that owner. CloseLoop is
+only a resource server in this milestone and does not implement token issuance or PKCE.
+
+The provider remains a labeled demo simulation. Alexa+ client setup, AWS orchestration, and real
+provider execution remain later work. The deterministic verifier remains the sole verdict
+producer.

@@ -5,8 +5,11 @@ from typing import Literal
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.tools import Tool
+from mcp.server.auth.provider import TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.types import ToolAnnotations
 
+from .auth import PrincipalResolver, principal_from_authenticated_request
 from .lifecycle import ResolutionService
 
 
@@ -24,7 +27,12 @@ def _strict_tool(function: Callable[..., object], annotations: ToolAnnotations) 
     return tool
 
 
-def create_mcp_server(service: ResolutionService | None = None) -> MCPServer:
+def create_mcp_server(
+    service: ResolutionService | None = None,
+    principal_resolver: PrincipalResolver = principal_from_authenticated_request,
+    auth_settings: AuthSettings | None = None,
+    token_verifier: TokenVerifier | None = None,
+) -> MCPServer:
     resolution_service = service or ResolutionService()
 
     def start_resolution(
@@ -37,7 +45,7 @@ def create_mcp_server(service: ResolutionService | None = None) -> MCPServer:
         The returned resolution always requires explicit confirmation.
         """
 
-        return resolution_service.start_resolution(intent, provider_mode)
+        return resolution_service.start_resolution(principal_resolver(), intent, provider_mode)
 
     def confirm_resolution_action(
         resolution_id: str,
@@ -45,22 +53,26 @@ def create_mcp_server(service: ResolutionService | None = None) -> MCPServer:
     ) -> dict[str, object]:
         """Execute only after explicit confirmation, then independently verify."""
 
-        return resolution_service.confirm_resolution_action(resolution_id, confirmed)
+        return resolution_service.confirm_resolution_action(
+            principal_resolver(), resolution_id, confirmed
+        )
 
     def get_resolution_status(resolution_id: str) -> dict[str, object]:
         """Read lifecycle and consumer-facing status without changing it."""
 
-        return resolution_service.get_resolution_status(resolution_id)
+        return resolution_service.get_resolution_status(principal_resolver(), resolution_id)
 
     def get_resolution_evidence(resolution_id: str) -> dict[str, object]:
         """Read separate execution, read-back, and verifier evidence records."""
 
-        return resolution_service.get_resolution_evidence(resolution_id)
+        return resolution_service.get_resolution_evidence(principal_resolver(), resolution_id)
 
     def list_open_resolutions(limit: int = 50) -> dict[str, list[dict[str, object]]]:
         """List non-terminal resolutions without advancing their lifecycle."""
 
-        return {"resolutions": resolution_service.list_open_resolutions(limit)}
+        return {
+            "resolutions": resolution_service.list_open_resolutions(principal_resolver(), limit)
+        }
 
     tools = [
         _strict_tool(
@@ -121,6 +133,8 @@ def create_mcp_server(service: ResolutionService | None = None) -> MCPServer:
             "Start a resolution, obtain explicit user confirmation, then confirm the action. "
             "Execution claims are not verdicts; use status and evidence to report the outcome."
         ),
-        version="0.2.0",
+        version="0.3.0",
         tools=tools,
+        auth=auth_settings,
+        token_verifier=token_verifier,
     )

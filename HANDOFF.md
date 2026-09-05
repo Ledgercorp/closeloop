@@ -2,164 +2,199 @@
 
 ## Current phase
 
-Milestone 2 is complete. Milestones 0 and 1 remain intact, and the canonical
-subscription-cancellation demo now has a production-shaped MCP action lifecycle around the
-existing deterministic verification core.
+Milestone 3 is complete. The Milestone 2 action lifecycle now uses a durable, owner-scoped SQL
+repository with a bearer-token authorization boundary. The deterministic verification core and
+all prior lifecycle semantics remain intact.
 
-No Milestone 3, final UI, full Alexa integration, AWS orchestration, or additional provider
-category work was started.
+The official Amazon Devices Builder Tools MCP context is initialized for later Amazon-specific
+work, but no Milestone 4, Alexa+ integration, AWS orchestration, final UI, additional provider
+category, or live deployment work was started.
 
-## Implemented in Milestone 2
+## Implemented in Milestone 3
 
-- explicit lifecycle transitions:
-  `REQUESTED -> AWAITING_CONFIRMATION -> EXECUTING -> VERIFYING -> terminal`;
-- terminal states that preserve the required mapping:
-  `PASS -> VERIFIED`, `FAIL -> NOT_COMPLETED`, and
-  `INCONCLUSIVE -> AWAITING_PROOF`;
-- confirmation-gated execution: starting a consequential resolution performs no provider
-  mutation, and `confirmed=true` is required before execution;
-- separate execution-claim, independent-read-back, and verifier evidence records with source,
-  identifier, and UTC timestamp provenance;
-- a locked process-local resolution repository that rejects duplicate/invalid transitions;
-- exactly five MCP tools:
+- Replaced process-local resolution storage with a SQLAlchemy repository supporting file-backed
+  SQLite for local development and PostgreSQL through `psycopg` for shared serverless storage.
+- Persisted resolution/owner identifiers, intent, provider mode, lifecycle state and history,
+  optimistic version, confirmation time, execution receipt and observation time, independent
+  read-back and observation time, verifier result and evaluation time, and terminal outcome.
+- Preserved the exact lifecycle and terminal mapping:
+  `REQUESTED -> AWAITING_CONFIRMATION -> EXECUTING -> VERIFYING`, followed by
+  `PASS -> VERIFIED`, `FAIL -> NOT_COMPLETED`, or
+  `INCONCLUSIVE -> AWAITING_PROOF`.
+- Added version-checked conditional transitions so concurrent instances cannot both advance the
+  same confirmation. Stale writers fail before provider execution.
+- Enforced repository-level invariants: execution requires persisted confirmation, verification
+  requires persisted execution evidence, terminal state requires the complete independent
+  verifier chain, illegal lifecycle jumps fail, and an existing terminal row cannot be changed.
+- Added an HTTP authorization boundary using issuer- and audience-bound HS256 JWTs. The owner key
+  is a SHA-256 digest of validated `iss` and `sub`; no tool accepts a caller-provided principal.
+- Scoped every lookup, confirmation, evidence fetch, and open-resolution query to the owner key.
+  Missing and unauthorized resolution IDs intentionally return the same error.
+- Required the `closeloop:resolutions` scope and preserved DNS-rebinding host/origin protections.
+- Kept exactly the five strict MCP tools:
   - `start_resolution`
   - `confirm_resolution_action`
   - `get_resolution_status`
   - `get_resolution_evidence`
   - `list_open_resolutions`
-- strict MCP input schemas that reject undeclared fields before handler execution, including
-  attempted `verdict`, `success`, or `status` overrides;
-- Streamable HTTP at `/mcp`, with a test proving negotiation of MCP `2025-11-25` and tool calls;
-- DNS-rebinding defenses with exact host/origin allowlists, automatic `VERCEL_URL` support,
-  and configurable `CLOSELOOP_ALLOWED_HOSTS` / `CLOSELOOP_ALLOWED_ORIGINS`;
-- FastAPI/Vercel health routes preserved at `/` and `/health`;
-- locked Python dependencies and an installable `src` package at version `0.2.0`.
+- Preserved `/`, `/health`, and Streamable HTTP `/mcp`. The complete MCP ASGI app is mounted so
+  its authentication middleware remains in the request path.
+- Updated the package and MCP/FastAPI version to `0.3.0` and locked the new SQL/JWT dependencies.
 
-There is no `set_verdict`, `mark_success`, `force_pass`, or equivalent MCP/API method. Only
-`verify_cancellation` produces `PASS`, `FAIL`, or `INCONCLUSIVE`; the lifecycle maps that
-immutable result to its user-facing terminal state.
+There is no `set_verdict`, `mark_success`, `force_pass`, or equivalent write method. Provider
+execution claims remain evidence only. Only `verify_cancellation` produces `PASS`, `FAIL`, or
+`INCONCLUSIVE`, and the repository validates the resulting terminal/evidence correspondence.
+
+## Amazon Devices Builder Tools initialization
+
+The exact requested initializer was run from the repository root:
+
+```bash
+npx -y @amazon-devices/amazon-devices-buildertools-mcp@latest init-context
+```
+
+Interactive choices were Codex, update `/Users/colbyweiss/.codex/config.toml`, use the repository
+root for the context file, and opt out of a project identifier. The initializer reported MCP
+package version `1.0.10` and wrote:
+
+- repository `AGENTS.md`, subsequently amended only with a CloseLoop authority/scope preamble;
+- repository `.adbt-config.json` containing the private/opt-out identifier;
+- an enabled `amazon-devices-buildertools-mcp` `npx` stanza in the global Codex config;
+- 12 Amazon Devices Vega skills plus the Amazon Developers community
+  `vega-multi-tv-migration` skill under `/Users/colbyweiss/.agents/skills`.
+
+Every installed file was inventoried. The files are text/JSON templates, their JSON files parse,
+no installed file is executable, and the 12 packaged skills share the same license. The skill
+corpus is Vega/Fire OS-focused and contains no Alexa+-specific guidance. No generated React
+Native/Vega architecture, dependency, or template was copied into CloseLoop. The initializer
+printed npm deprecation warnings for transitive CLI packages; it did not add npm dependencies or
+a `package.json` to this repository.
+
+The generated context requires an explicit Vega/Fire OS platform for documentation requests.
+CloseLoop has not selected either platform, so no platform was invented and no Amazon Devices MCP
+documentation call was made in this session. `HACKATHON_REQUIREMENTS.md` records the future
+official-documentation and submission-evidence gate; the existing CloseLoop constraints remain
+higher authority.
 
 ## Baseline reproduced before changes
 
-The host `python3` is 3.9.6, below the repository's Python 3.11 requirement, and initially had
-no pytest module. The first command therefore failed before test collection:
+The authoritative starting point was a clean `main` branch at `2810fd0` with `HEAD`, `main`, and
+`origin/main` aligned:
 
 ```bash
-python3 -m pytest -q
+git status --short
+git log -5 --oneline --decorate
+uv lock --check
+uv sync --locked --extra test --no-editable
+uv run --no-editable pytest -q
 ```
 
-An isolated Python 3.11.16 environment was then created and the original suite was run:
+Result before Milestone 3 changes: `19 passed`, with one non-failing Starlette/anyio deprecation
+warning. That run reproduced the Milestone 2 baseline, including:
 
-```bash
-uv venv --python /Users/colbyweiss/.local/bin/python3.11 .venv
-uv pip install --python .venv/bin/python -e . pytest httpx
-.venv/bin/python -m pytest -q
-```
-
-Result before code changes: `4 passed`.
-
-The original deterministic core was also exercised directly. Results:
-
-```text
-healthy: PASS / Verified
-false_success: FAIL / Not completed
-evidence_outage: INCONCLUSIVE / Awaiting proof
-```
-
-The original `main:app` returned HTTP 200 from both `/` and `/health` through FastAPI's test
-client before changes.
+- healthy evidence: `PASS / Verified`;
+- provider false-success plus contradictory read-back: `FAIL / Not completed`;
+- unavailable independent read-back: `INCONCLUSIVE / Awaiting proof`;
+- HTTP 200 with the expected JSON at both `/` and `/health`.
 
 ## Final verification evidence
 
-Commands run against the final Milestone 2 diff:
+Commands run against the final Milestone 3 diff:
 
 ```bash
 uv lock --check
 uv sync --locked --extra test --no-editable
 uv run --no-editable python -m compileall -q src main.py
-uv run --no-editable pytest -q -vv tests/test_resolution_lifecycle.py tests/test_mcp_server.py
+uv run --no-editable pytest -q tests/test_durable_repository.py tests/test_resolution_lifecycle.py tests/test_mcp_server.py
 uv run --no-editable pytest -q
 git diff --check
 ```
 
 Results:
 
-- dependency resolution/lock check: passed (`39` packages resolved, `36` checked);
-- source and Vercel entrypoint compilation: passed;
-- Milestone 2 focused suite: `15 passed`;
-- full suite: `19 passed`;
-- diff whitespace check: passed;
+- dependency lock check passed (`44` packages resolved);
+- locked environment sync passed (`39` packages checked);
+- source and Vercel entrypoint compilation passed;
+- focused durability/lifecycle/MCP suite: `25 passed`;
+- full suite, including every prior test: `29 passed`;
+- diff whitespace check passed;
 - one non-failing upstream warning remains: Starlette's test client uses the deprecated
   `anyio.abc.BlockingPortal` alias.
 
-Verification level: **INTEGRATION VERIFIED** locally. The supported MCP protocol was exercised
-through the ASGI Streamable HTTP endpoint; no remote deployment or Alexa client was live-tested.
+Verification level: **INTEGRATION VERIFIED locally**. SQLite files simulated process/repository
+re-instantiation, and the MCP authorization boundary was exercised through the ASGI Streamable
+HTTP endpoint. PostgreSQL compatibility is implemented through SQLAlchemy/psycopg but was not
+tested against a live database or Vercel deployment.
 
-## Acceptance results
+## Milestone 3 acceptance results
 
-All 25 checks in `ACCEPTANCE_TESTS.md` pass:
+1. All prior 19 tests remain green in the final 29-test run.
+2. Resolution state and all evidence survive repository and service re-instantiation.
+3. Healthy, false-success, and evidence-outage outcomes persist respectively as
+   `PASS / Verified`, `FAIL / Not completed`, and `INCONCLUSIVE / Awaiting proof`.
+4. Terminal rows reject later writes at the repository boundary.
+5. Stale cross-instance writers reject with an optimistic-concurrency error.
+6. Direct illegal lifecycle jumps are rejected.
+7. Repository writes cannot enter `EXECUTING` without persisted explicit confirmation.
+8. A second principal cannot read, confirm, fetch evidence for, or list the first principal's
+   resolution, both through the service/repository and through authenticated MCP HTTP calls.
+9. Missing bearer authentication returns HTTP 401; a valid token lacking the required scope
+   returns HTTP 403.
+10. Strict MCP schemas still reject undeclared verdict/status/success fields before execution,
+    and the public surface remains exactly five tools with no verdict-write method.
+11. The FastAPI root and health routes remain HTTP 200 with their prior response contracts.
+12. A serverless environment without a shared database URL fails closed instead of using
+    ephemeral filesystem state.
 
-1. Existing verifier suite passes in the full 19-test run.
-2. False success remains `FAIL / Not completed`.
-3. Missing independent evidence remains `INCONCLUSIVE / Awaiting proof`.
-4. `main:app`, `/`, and `/health` remain valid.
-5. Start returns a non-terminal resolution.
-6. Consequential start returns `AWAITING_CONFIRMATION`.
-7. Missing/false confirmation rejects execution and leaves provider mutation count at zero.
-8. Repeated confirmation rejects an invalid terminal transition.
-9. Repeated status/evidence reads return identical state and evidence.
-10. A provider success claim alone never produces `VERIFIED`.
-11. Successful execution plus confirming read-back produces `PASS / Verified`.
-12. Claimed success plus contradictory read-back produces `FAIL / Not completed`.
-13. Possibly executed action plus unavailable read-back produces
-    `INCONCLUSIVE / Awaiting proof`.
-14. The public MCP surface contains no verdict-write method.
-15. Extra `verdict`, `success`, and `status` fields are rejected before execution.
-16. `start_resolution` is registered and called through MCP.
-17. `confirm_resolution_action` is registered and called through MCP.
-18. `get_resolution_status` is registered and called through MCP.
-19. `get_resolution_evidence` is registered and called through MCP.
-20. `list_open_resolutions` is registered and called through MCP.
-21. No forbidden or equivalent verdict-write tool is registered.
-22. Streamable HTTP negotiates protocol version `2025-11-25` at `/mcp`.
-23. Execution claim and independent read-back have distinct evidence types and sources.
-24. Evidence includes resolution/request identifiers, UTC timestamps, sources, and verifier ID.
-25. Status/evidence exposes plain-language state and reason for all three outcomes.
+## Changed repository files
 
-## Changed files
-
+- `.adbt-config.json`
 - `.gitignore`
+- `AGENTS.md`
+- `HACKATHON_REQUIREMENTS.md`
 - `HANDOFF.md`
 - `README.md`
 - `apps/mcp-server/README.md`
 - `docs/architecture.md`
 - `docs/trust-model.md`
-- `main.py`
 - `pyproject.toml`
 - `src/closeloop/__init__.py`
+- `src/closeloop/auth.py`
 - `src/closeloop/http_app.py`
 - `src/closeloop/lifecycle.py`
 - `src/closeloop/mcp_server.py`
+- `src/closeloop/repository.py`
+- `tests/test_durable_repository.py`
 - `tests/test_mcp_server.py`
 - `tests/test_resolution_lifecycle.py`
 - `uv.lock`
 
 ## Known limitations / blockers
 
-There are no blockers to the Milestone 2 acceptance criteria. Remaining limitations are stated
-explicitly rather than represented as completed work:
+There are no blockers to the requested Milestone 3 acceptance boundary. Remaining limitations are
+explicit:
 
-- resolution state is process-local and is not durable across restarts or Vercel instances;
-- the cancellation provider is the labeled first-party demo simulation, not a live provider;
-- remote authentication/PKCE, Alexa+ client integration, and AWS orchestration are not present;
-- Vercel remained locally importable/testable but was not deployed or production-tested in this
-  milestone;
-- on this macOS host, Python skips hidden editable-install `.pth` files, so documented `uv`
+- No live Vercel deployment or PostgreSQL service was exercised. Cross-instance behavior was
+  verified locally by constructing independent repositories/services over the same SQLite file.
+- Schema creation is idempotent through SQLAlchemy `create_all`; versioned production migrations
+  are not yet implemented.
+- CloseLoop is a JWT resource server in this milestone. It does not mint tokens, provide OAuth
+  authorization flows, or implement PKCE. The deployment must provide an external issuer and a
+  secret of at least 32 bytes.
+- A process failure after the action enters `EXECUTING` or `VERIFYING` leaves a truthful persisted
+  in-progress state. Automatic recovery/reconciliation is not implemented, preventing unsafe
+  blind re-execution but requiring a later recovery design.
+- The cancellation provider remains the labeled first-party demo simulation; no live provider,
+  Alexa+, or AWS path was tested.
+- The newly configured Amazon Devices MCP will be available to newly started Codex sessions; its
+  installed context currently supplies Vega/Fire OS guidance, not Alexa+ compliance evidence.
+- On this macOS host, Python skips hidden editable-install `.pth` files, so the documented `uv`
   commands use `--no-editable` for deterministic local imports.
 
 ## Next recommended step
 
-Stop here. After owner approval to begin Milestone 3, first define and test a durable,
-cross-instance resolution repository plus its authorization boundary so confirmation state and
-terminal evidence survive process restarts. Do not add Alexa/AWS orchestration before that state
-contract preserves the Milestone 2 trust invariants.
+Stop here. After explicit approval to begin Milestone 4, first use the official Amazon Devices
+Builder Tools documentation context where applicable to re-verify then-current Alexa+/MCP and
+submission constraints. Then add production schema migrations and an idempotent
+recovery/reconciliation path for persisted `EXECUTING` and `VERIFYING` records before Alexa+, AWS
+orchestration, final UI, or broader provider work.

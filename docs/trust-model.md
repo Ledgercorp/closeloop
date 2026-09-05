@@ -59,3 +59,17 @@ Provider-reported success is never sufficient for PASS.
   record types with source, identifier, and timestamp provenance.
 - Only the deterministic verifier result maps a resolution to `VERIFIED`, `NOT_COMPLETED`,
   or `AWAITING_PROOF`.
+
+## Ownership boundary
+
+- MCP endpoints require a valid, unexpired, issuer- and audience-bound bearer token with the
+  `closeloop:resolutions` scope.
+- The owner key is derived from the validated `iss` and `sub` claims and is never supplied in tool
+  arguments.
+- Every repository lookup and mutation matches both resolution ID and owner key. Missing and
+  unauthorized IDs return the same error so callers cannot enumerate another owner.
+- Open-resolution queries always filter by owner.
+- Optimistic versions serialize cross-instance updates; stale writers fail rather than repeating
+  a consequential action.
+- A row whose stored state is terminal cannot be updated, even if a caller presents an older or
+  fabricated in-memory state.

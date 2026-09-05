@@ -53,7 +53,25 @@ REQUESTED -> AWAITING_CONFIRMATION -> EXECUTING -> VERIFYING
 the execution receipt, performs a separate read-back, and passes both into the existing
 deterministic verifier. Status, evidence, and list tools are read-only.
 
-Milestone 2 deliberately keeps records in a locked process-local store. This is sufficient
-for the deterministic MCP lifecycle and demo acceptance tests, but it is not durable across
-Vercel instances or process restarts. Durable storage is the next lifecycle-hardening step;
-it is not hidden behind a false persistence claim here.
+## Milestone 3 persistence and authorization
+
+The process-local store is replaced by an owner-scoped SQL repository:
+
+```text
+Bearer token -> validated issuer + subject -> hashed owner key
+                                              |
+MCP tool -> lifecycle service -> conditional SQL update -> SQLite/PostgreSQL
+                                              |
+                                   persisted state + evidence + version
+```
+
+Local development uses file-backed SQLite. Serverless deployments require a shared PostgreSQL
+URL and never fall back to ephemeral local storage when `VERCEL` is present. SQLAlchemy uses
+short-lived connections, and every transition checks both the stored version and allowed prior
+state so competing instances cannot execute the same confirmation.
+
+The repository persists confirmation, lifecycle state/history, execution receipt, independent
+read-back, verifier result, identifiers, UTC timestamps, and terminal outcome. Once a stored row
+is terminal, its update predicate fails closed and the repository reports an immutable-outcome
+error. Schema creation is currently idempotent at startup; versioned production migrations remain
+a later operational hardening task.

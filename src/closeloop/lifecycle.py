@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from threading import RLock
 from typing import Callable, Protocol
 from uuid import uuid4
 
@@ -38,16 +37,34 @@ _ALLOWED_TRANSITIONS = {
 }
 
 
+def allowed_previous_states(next_state: LifecycleState) -> frozenset[LifecycleState]:
+    return frozenset(
+        state for state, allowed in _ALLOWED_TRANSITIONS.items() if next_state in allowed
+    )
+
+
 class ResolutionError(ValueError):
     """Base error for a rejected resolution operation."""
 
 
 class ResolutionNotFoundError(ResolutionError):
-    """Raised when a resolution identifier does not exist."""
+    """Raised for missing and unauthorized resolutions without revealing which."""
 
 
 class InvalidTransitionError(ResolutionError):
     """Raised when a lifecycle transition is not explicitly allowed."""
+
+
+class ConcurrentResolutionUpdateError(ResolutionError):
+    """Raised when another instance changed a resolution first."""
+
+
+class TerminalOutcomeImmutableError(ResolutionError):
+    """Raised when an update attempts to change an existing terminal outcome."""
+
+
+class ResolutionStorageUnavailableError(RuntimeError):
+    """Raised when durable storage is not configured or reachable."""
 
 
 class CancellationProvider(Protocol):
@@ -64,7 +81,11 @@ def _utc_now() -> datetime:
 
 
 def _isoformat(value: datetime | None) -> str | None:
-    return value.isoformat().replace("+00:00", "Z") if value else None
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -76,9 +97,9 @@ class StateTransition:
 @dataclass
 class ResolutionRecord:
     resolution_id: str
+    owner_id: str
     intent: str
     provider_mode: str
-    provider: CancellationProvider = field(repr=False)
     state: LifecycleState = LifecycleState.REQUESTED
     created_at: datetime = field(default_factory=_utc_now)
     updated_at: datetime = field(default_factory=_utc_now)
@@ -90,26 +111,45 @@ class ResolutionRecord:
     verification: VerificationResult | None = None
     verified_at: datetime | None = None
     state_history: list[StateTransition] = field(default_factory=list)
+    version: int = 0
+
+
+class ResolutionRepository(Protocol):
+    def create(self, record: ResolutionRecord) -> None: ...
+
+    def get_owned(self, resolution_id: str, owner_id: str) -> ResolutionRecord: ...
+
+    def save_owned(self, record: ResolutionRecord, expected_version: int) -> None: ...
+
+    def list_open_owned(self, owner_id: str, limit: int) -> list[ResolutionRecord]: ...
 
 
 class ResolutionService:
-    """Owns action lifecycle state without granting callers verdict authority.
+    """Runs the lifecycle using durable, owner-scoped optimistic updates.
 
-    Storage is deliberately process-local for Milestone 2. The lock prevents a
-    resolution from being confirmed/executed twice within one server process.
-    Only ``verify_cancellation`` can create a terminal verifier result.
+    The repository is the cross-instance serialization boundary. Only the
+    deterministic verifier may produce a terminal verdict.
     """
 
-    def __init__(self, provider_factory: ProviderFactory = DemoProvider) -> None:
+    def __init__(
+        self,
+        repository: ResolutionRepository | None = None,
+        provider_factory: ProviderFactory = DemoProvider,
+    ) -> None:
+        if repository is None:
+            from .repository import create_repository_from_environment
+
+            repository = create_repository_from_environment()
+        self._repository = repository
         self._provider_factory = provider_factory
-        self._records: dict[str, ResolutionRecord] = {}
-        self._lock = RLock()
 
     def start_resolution(
         self,
+        owner_id: str,
         intent: str,
         provider_mode: str = "healthy",
     ) -> dict[str, object]:
+        self._validate_owner(owner_id)
         normalized_intent = intent.strip()
         if not normalized_intent:
             raise ResolutionError("intent must not be empty")
@@ -117,80 +157,79 @@ class ResolutionService:
         now = _utc_now()
         record = ResolutionRecord(
             resolution_id=str(uuid4()),
+            owner_id=owner_id,
             intent=normalized_intent,
             provider_mode=provider_mode,
-            provider=self._provider_factory(provider_mode),
             created_at=now,
             updated_at=now,
             state_history=[StateTransition(LifecycleState.REQUESTED, now)],
         )
         self._transition(record, LifecycleState.AWAITING_CONFIRMATION)
-        with self._lock:
-            self._records[record.resolution_id] = record
-            return self._status_view(record)
+        self._repository.create(record)
+        return self._status_view(record)
 
     def confirm_resolution_action(
         self,
+        owner_id: str,
         resolution_id: str,
         confirmed: bool,
     ) -> dict[str, object]:
+        self._validate_owner(owner_id)
         if confirmed is not True:
             raise ResolutionError("explicit confirmation is required before execution")
 
-        with self._lock:
-            record = self._get_record(resolution_id)
-            if record.state is not LifecycleState.AWAITING_CONFIRMATION:
-                raise InvalidTransitionError(
-                    f"cannot confirm resolution while state is {record.state.value}"
-                )
-            record.confirmed_at = _utc_now()
-            self._transition(record, LifecycleState.EXECUTING)
+        record = self._repository.get_owned(resolution_id, owner_id)
+        if record.state is not LifecycleState.AWAITING_CONFIRMATION:
+            raise InvalidTransitionError(
+                f"cannot confirm resolution while state is {record.state.value}"
+            )
+        record.confirmed_at = _utc_now()
+        self._transition(record, LifecycleState.EXECUTING)
+        self._repository.save_owned(record, expected_version=record.version)
 
-        receipt = self._execute(record)
-        with self._lock:
-            record.execution_claim = receipt
-            record.execution_claim_observed_at = _utc_now()
-            self._transition(record, LifecycleState.VERIFYING)
+        provider = self._provider_factory(record.provider_mode)
+        receipt = self._execute(provider)
+        record.execution_claim = receipt
+        record.execution_claim_observed_at = _utc_now()
+        self._transition(record, LifecycleState.VERIFYING)
+        self._repository.save_owned(record, expected_version=record.version)
 
-        evidence = self._collect_independent_evidence(record)
+        evidence = self._collect_independent_evidence(provider)
         result = verify_cancellation(receipt, evidence)
+        record.independent_evidence = evidence
+        record.independent_evidence_observed_at = _utc_now()
+        record.verification = result
+        record.verified_at = _utc_now()
+        self._transition(record, self._terminal_state_for(result))
+        self._repository.save_owned(record, expected_version=record.version)
+        return self._status_view(record)
 
-        with self._lock:
-            record.independent_evidence = evidence
-            record.independent_evidence_observed_at = _utc_now()
-            record.verification = result
-            record.verified_at = _utc_now()
-            self._transition(record, self._terminal_state_for(result))
-            return self._status_view(record)
+    def get_resolution_status(self, owner_id: str, resolution_id: str) -> dict[str, object]:
+        self._validate_owner(owner_id)
+        return self._status_view(self._repository.get_owned(resolution_id, owner_id))
 
-    def get_resolution_status(self, resolution_id: str) -> dict[str, object]:
-        with self._lock:
-            return self._status_view(self._get_record(resolution_id))
+    def get_resolution_evidence(self, owner_id: str, resolution_id: str) -> dict[str, object]:
+        self._validate_owner(owner_id)
+        return self._evidence_view(self._repository.get_owned(resolution_id, owner_id))
 
-    def get_resolution_evidence(self, resolution_id: str) -> dict[str, object]:
-        with self._lock:
-            return self._evidence_view(self._get_record(resolution_id))
-
-    def list_open_resolutions(self, limit: int = 50) -> list[dict[str, object]]:
+    def list_open_resolutions(self, owner_id: str, limit: int = 50) -> list[dict[str, object]]:
+        self._validate_owner(owner_id)
         if limit < 1 or limit > 100:
             raise ResolutionError("limit must be between 1 and 100")
-        with self._lock:
-            open_records = [
-                record for record in self._records.values() if record.state not in TERMINAL_STATES
-            ]
-            open_records.sort(key=lambda record: record.created_at)
-            return [self._status_view(record) for record in open_records[:limit]]
-
-    def _get_record(self, resolution_id: str) -> ResolutionRecord:
-        try:
-            return self._records[resolution_id]
-        except KeyError as exc:
-            raise ResolutionNotFoundError(f"unknown resolution: {resolution_id}") from exc
+        return [
+            self._status_view(record)
+            for record in self._repository.list_open_owned(owner_id, limit)
+        ]
 
     @staticmethod
-    def _execute(record: ResolutionRecord) -> ActionReceipt:
+    def _validate_owner(owner_id: str) -> None:
+        if not owner_id or not owner_id.strip():
+            raise ResolutionError("an authenticated principal is required")
+
+    @staticmethod
+    def _execute(provider: CancellationProvider) -> ActionReceipt:
         try:
-            return record.provider.cancel_subscription()
+            return provider.cancel_subscription()
         except Exception:
             return ActionReceipt(
                 request_id=str(uuid4()),
@@ -199,9 +238,9 @@ class ResolutionService:
             )
 
     @staticmethod
-    def _collect_independent_evidence(record: ResolutionRecord) -> CancellationEvidence:
+    def _collect_independent_evidence(provider: CancellationProvider) -> CancellationEvidence:
         try:
-            return record.provider.read_cancellation_evidence()
+            return provider.read_cancellation_evidence()
         except Exception:
             return CancellationEvidence(
                 account_readable=False,
@@ -220,8 +259,7 @@ class ResolutionService:
 
     @staticmethod
     def _transition(record: ResolutionRecord, next_state: LifecycleState) -> None:
-        allowed = _ALLOWED_TRANSITIONS.get(record.state, frozenset())
-        if next_state not in allowed:
+        if record.state not in allowed_previous_states(next_state):
             raise InvalidTransitionError(
                 f"transition {record.state.value} -> {next_state.value} is not allowed"
             )

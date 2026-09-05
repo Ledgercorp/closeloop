@@ -3,8 +3,11 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI
+from mcp.server.auth.provider import TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
 
+from .auth import auth_configuration_from_environment
 from .lifecycle import ResolutionService
 from .mcp_server import create_mcp_server
 
@@ -31,8 +34,21 @@ def _transport_security() -> TransportSecuritySettings:
     )
 
 
-def create_app(service: ResolutionService | None = None) -> FastAPI:
-    mcp_server = create_mcp_server(service)
+def create_app(
+    service: ResolutionService | None = None,
+    auth_settings: AuthSettings | None = None,
+    token_verifier: TokenVerifier | None = None,
+) -> FastAPI:
+    if auth_settings is None and token_verifier is None:
+        auth_settings, token_verifier = auth_configuration_from_environment()
+    if auth_settings is None or token_verifier is None:
+        raise ValueError("auth_settings and token_verifier must be configured together")
+
+    mcp_server = create_mcp_server(
+        service,
+        auth_settings=auth_settings,
+        token_verifier=token_verifier,
+    )
     mcp_http_app = mcp_server.streamable_http_app(
         streamable_http_path="/mcp",
         stateless_http=True,
@@ -41,7 +57,7 @@ def create_app(service: ResolutionService | None = None) -> FastAPI:
     )
     app = FastAPI(
         title="CloseLoop",
-        version="0.2.0",
+        version="0.3.0",
         lifespan=mcp_http_app.router.lifespan_context,
     )
 
@@ -57,6 +73,8 @@ def create_app(service: ResolutionService | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "healthy"}
 
-    app.router.routes.extend(mcp_http_app.routes)
+    # Mount the complete MCP ASGI app so its authentication middleware remains
+    # in the request path; copying only its routes would discard that boundary.
+    app.mount("/", mcp_http_app)
     app.state.mcp_server = mcp_server
     return app

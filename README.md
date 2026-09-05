@@ -26,7 +26,11 @@ explicit confirmation before execution, records the provider claim separately fr
 independent read-back, and exposes only read access to the verifier's terminal result.
 
 The provider remains a clearly labeled in-process demo simulation. Alexa+ client integration,
-durable shared storage, and AWS orchestration are intentionally deferred beyond Milestone 2.
+AWS orchestration, final UI work, and additional provider categories remain deferred.
+
+Milestone 3 adds durable SQLite/PostgreSQL resolution storage, optimistic cross-instance
+transitions, immutable terminal outcomes, and owner isolation derived from authenticated bearer
+tokens. CloseLoop does not accept a caller-provided principal identifier and does not mint tokens.
 
 ## Install and test
 
@@ -46,6 +50,13 @@ The health endpoints remain at `/` and `/health`. The MCP service uses Streamabl
 Python SDK. For a non-local host, set `CLOSELOOP_ALLOWED_HOSTS`; set
 `CLOSELOOP_ALLOWED_ORIGINS` when browser origins must be permitted. Both variables accept
 comma-separated exact values. Vercel's `VERCEL_URL` is trusted automatically.
+
+Local development defaults to `.closeloop/resolutions.db`. Serverless deployments fail closed
+unless one of `CLOSELOOP_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` provides a shared
+PostgreSQL database. MCP requests also fail closed unless `CLOSELOOP_AUTH_SECRET` is at least
+32 bytes. Configure `CLOSELOOP_AUTH_ISSUER` and `CLOSELOOP_AUTH_AUDIENCE` to match the external
+token issuer. Tokens must use HS256, contain `iss`, `aud`, `sub`, `iat`, and `exp`, and include
+the `closeloop:resolutions` scope. Health routes remain unauthenticated.
 
 ## Design rule
 

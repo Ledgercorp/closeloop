@@ -2,11 +2,19 @@ from datetime import datetime
 
 import pytest
 
+from closeloop.demo_provider import DemoProvider
 from closeloop.lifecycle import InvalidTransitionError, ResolutionError, ResolutionService
 from closeloop.models import ActionReceipt, CancellationEvidence
+from closeloop.repository import SqlResolutionRepository
 
 
 INTENT = "Cancel my subscription and make sure I will not be charged again."
+OWNER = "owner-a"
+
+
+def make_service(tmp_path, provider_factory=DemoProvider):
+    repository = SqlResolutionRepository(f"sqlite+pysqlite:///{tmp_path / 'resolutions.db'}")
+    return ResolutionService(repository, provider_factory)
 
 
 class CountingProvider:
@@ -23,11 +31,11 @@ class CountingProvider:
         return CancellationEvidence(True, False, "2026-09-30", 0)
 
 
-def test_start_requires_confirmation_before_any_mutation():
+def test_start_requires_confirmation_before_any_mutation(tmp_path):
     provider = CountingProvider()
-    service = ResolutionService(lambda _: provider)
+    service = make_service(tmp_path, lambda _: provider)
 
-    started = service.start_resolution(INTENT)
+    started = service.start_resolution(OWNER, INTENT)
 
     assert started["lifecycle_state"] == "AWAITING_CONFIRMATION"
     assert started["is_terminal"] is False
@@ -37,10 +45,10 @@ def test_start_requires_confirmation_before_any_mutation():
     assert provider.read_count == 0
 
     with pytest.raises(ResolutionError, match="explicit confirmation"):
-        service.confirm_resolution_action(started["resolution_id"], confirmed=False)
+        service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=False)
 
     assert provider.execution_count == 0
-    assert service.get_resolution_status(started["resolution_id"]) == started
+    assert service.get_resolution_status(OWNER, started["resolution_id"]) == started
 
 
 @pytest.mark.parametrize(
@@ -52,13 +60,13 @@ def test_start_requires_confirmation_before_any_mutation():
     ],
 )
 def test_confirmed_action_uses_independent_verification(
-    provider_mode, verdict, consumer_state, lifecycle_state
+    tmp_path, provider_mode, verdict, consumer_state, lifecycle_state
 ):
-    service = ResolutionService()
-    started = service.start_resolution(INTENT, provider_mode)
+    service = make_service(tmp_path)
+    started = service.start_resolution(OWNER, INTENT, provider_mode)
 
-    completed = service.confirm_resolution_action(started["resolution_id"], confirmed=True)
-    evidence = service.get_resolution_evidence(started["resolution_id"])
+    completed = service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
+    evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
 
     assert completed["lifecycle_state"] == lifecycle_state
     assert completed["verdict"] == verdict
@@ -71,12 +79,12 @@ def test_confirmed_action_uses_independent_verification(
     assert evidence["verification"]["consumer_state"] == consumer_state
 
 
-def test_provider_success_claim_cannot_create_verified_result():
-    service = ResolutionService()
-    started = service.start_resolution(INTENT, "false_success")
+def test_provider_success_claim_cannot_create_verified_result(tmp_path):
+    service = make_service(tmp_path)
+    started = service.start_resolution(OWNER, INTENT, "false_success")
 
-    completed = service.confirm_resolution_action(started["resolution_id"], confirmed=True)
-    evidence = service.get_resolution_evidence(started["resolution_id"])
+    completed = service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
+    evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
 
     assert evidence["execution_claim"]["provider_reported_success"] is True
     assert evidence["independent_read_back"]["auto_renew"] is True
@@ -85,15 +93,15 @@ def test_provider_success_claim_cannot_create_verified_result():
     assert completed["lifecycle_state"] == "NOT_COMPLETED"
 
 
-def test_status_and_evidence_reads_do_not_mutate_outcome():
-    service = ResolutionService()
-    started = service.start_resolution(INTENT, "healthy")
-    terminal = service.confirm_resolution_action(started["resolution_id"], confirmed=True)
+def test_status_and_evidence_reads_do_not_mutate_outcome(tmp_path):
+    service = make_service(tmp_path)
+    started = service.start_resolution(OWNER, INTENT, "healthy")
+    terminal = service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
 
-    first_status = service.get_resolution_status(started["resolution_id"])
-    first_evidence = service.get_resolution_evidence(started["resolution_id"])
-    second_status = service.get_resolution_status(started["resolution_id"])
-    second_evidence = service.get_resolution_evidence(started["resolution_id"])
+    first_status = service.get_resolution_status(OWNER, started["resolution_id"])
+    first_evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
+    second_status = service.get_resolution_status(OWNER, started["resolution_id"])
+    second_evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
 
     assert first_status == second_status == terminal
     assert first_evidence == second_evidence
@@ -106,36 +114,36 @@ def test_status_and_evidence_reads_do_not_mutate_outcome():
     ]
 
 
-def test_repeated_confirmation_rejects_invalid_terminal_transition():
+def test_repeated_confirmation_rejects_invalid_terminal_transition(tmp_path):
     provider = CountingProvider()
-    service = ResolutionService(lambda _: provider)
-    started = service.start_resolution(INTENT)
-    service.confirm_resolution_action(started["resolution_id"], confirmed=True)
+    service = make_service(tmp_path, lambda _: provider)
+    started = service.start_resolution(OWNER, INTENT)
+    service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
 
     with pytest.raises(InvalidTransitionError, match="cannot confirm"):
-        service.confirm_resolution_action(started["resolution_id"], confirmed=True)
+        service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
 
     assert provider.execution_count == 1
 
 
-def test_list_open_resolutions_only_returns_non_terminal_records():
-    service = ResolutionService()
-    open_resolution = service.start_resolution("Cancel subscription A")
-    completed_resolution = service.start_resolution("Cancel subscription B")
-    service.confirm_resolution_action(completed_resolution["resolution_id"], confirmed=True)
+def test_list_open_resolutions_only_returns_non_terminal_records(tmp_path):
+    service = make_service(tmp_path)
+    open_resolution = service.start_resolution(OWNER, "Cancel subscription A")
+    completed_resolution = service.start_resolution(OWNER, "Cancel subscription B")
+    service.confirm_resolution_action(OWNER, completed_resolution["resolution_id"], confirmed=True)
 
-    listed = service.list_open_resolutions()
+    listed = service.list_open_resolutions(OWNER)
 
     assert [item["resolution_id"] for item in listed] == [open_resolution["resolution_id"]]
     assert listed[0]["is_terminal"] is False
 
 
-def test_evidence_has_stable_provenance_timestamps_and_identifiers():
-    service = ResolutionService()
-    started = service.start_resolution(INTENT)
-    service.confirm_resolution_action(started["resolution_id"], confirmed=True)
+def test_evidence_has_stable_provenance_timestamps_and_identifiers(tmp_path):
+    service = make_service(tmp_path)
+    started = service.start_resolution(OWNER, INTENT)
+    service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
 
-    evidence = service.get_resolution_evidence(started["resolution_id"])
+    evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
 
     assert evidence["resolution_id"] == started["resolution_id"]
     assert evidence["execution_claim"]["request_id"]
@@ -153,15 +161,16 @@ def test_evidence_has_stable_provenance_timestamps_and_identifiers():
         assert datetime.fromisoformat(timestamp.replace("Z", "+00:00")).tzinfo is not None
 
 
-def test_callers_have_no_direct_verdict_override_parameter():
-    service = ResolutionService()
-    started = service.start_resolution(INTENT, "false_success")
+def test_callers_have_no_direct_verdict_override_parameter(tmp_path):
+    service = make_service(tmp_path)
+    started = service.start_resolution(OWNER, INTENT, "false_success")
 
     with pytest.raises(TypeError):
         service.confirm_resolution_action(
+            OWNER,
             started["resolution_id"],
             confirmed=True,
             verdict="PASS",
         )
 
-    assert service.get_resolution_status(started["resolution_id"])["verdict"] is None
+    assert service.get_resolution_status(OWNER, started["resolution_id"])["verdict"] is None

@@ -26,6 +26,33 @@ Engineering target:
 
 If official documentation changes, update this file and implementation together. Do not silently ship a transport/version that is no longer eligible.
 
+## Official Amazon Builder Tools context
+
+The official Amazon Devices Builder Tools MCP context was initialized on 2026-09-05 with:
+
+```bash
+npx -y @amazon-devices/amazon-devices-buildertools-mcp@latest init-context
+```
+
+The initializer reported MCP package version `1.0.10` and context-document version `4.0.0`. It
+installed a Codex MCP configuration plus Vega/Fire OS skills. The installed material is scoped to
+Amazon Devices applications and does not itself verify Alexa+ hackathon eligibility, Alexa+ API
+behavior, or submission compliance.
+
+CloseLoop has not selected Vega or Fire OS, so `.adbt-config.json` intentionally contains only the
+private/opt-out project identifier and no platform declaration. Do not infer a platform or import
+the generated React Native/Vega templates or dependencies into the Python MCP service.
+
+Before any later Alexa+ implementation or final submission:
+
+- use the official Builder Tools MCP documentation tools with an explicit supported platform
+  decision where the tool requires one;
+- verify the then-current Alexa+, Amazon Devices API, MCP transport/version, and submission rules;
+- record document identifiers, dates, and any resulting requirement changes here or in the
+  friction log;
+- treat an unavailable or non-applicable Builder Tools result as an evidence gap, not as proof of
+  compliance.
+
 ## Required MCP surface for Milestone 2
 - `start_resolution`
 - `confirm_resolution_action`
