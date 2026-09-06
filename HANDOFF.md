@@ -2,20 +2,123 @@
 
 ## Current phase
 
-Milestone 7 is complete at **PARTIALLY ADVERSARIAL VERIFIED**. The prior untrusted
-`{resolution_id, confirmed}`
-boundary now requires a short-lived, signed `closeloop.confirmation/v1` attestation bound to the
-authenticated owner, exact resolution and canonical action digest, affirmative decision, trusted
-issuer/audience, issue/expiry times, and unique attestation ID. Verified provenance is consumed by
-the conditional `AWAITING_CONFIRMATION -> EXECUTING` transition and preserved in SQLite or DynamoDB
-history. Missing production configuration denies all confirmations; no signing secret or test
-issuer is enabled by default.
+Milestone 8 final submission packaging is implemented and the one final complete suite passes. The
+Development Governor found no BLOCKING/HIGH issue after its claim review; commit, push, and the
+signed-out repository/license check remain. The public README, deterministic recording index, sub-three-
+minute storyboard, submission copy, judging map, verification matrix, product feedback, screenshot
+plan, and manual checklist now tell one evidence-backed story without changing the CloseLoop trust
+model or adding providers/cloud dependencies.
 
-The two former strict xfails for cross-resolution and stale confirmation are ordinary passing
-tests in the focused runs so far. This remains local/integration verification plus Moto-simulated
-DynamoDB—not live Alexa+, AWS, provider, production OAuth, or trusted human-confirmation issuance.
-All focused regressions, the post-fix complete-suite checkpoint, and the CRITICAL-risk Governor
-final review passed. Milestone 8, demo optimization, and submission packaging have not started.
+Focused current-diff results are green: `2` dedicated demo-package tests; `30` combined demo/MCP/UI;
+`46` AWS/lifecycle/verifier; and `109` confirmation/adversarial security. The generated demo manifest
+proves `PASS -> Verified`, `FAIL -> Not completed`, and `INCONCLUSIVE -> Awaiting proof` through the
+real local MCP/lifecycle/repository/provider/read-back/verifier path. The provider and recording
+signer remain clearly labeled simulations.
+
+The public repository exists, but public application deployment remains **NOT VERIFIED**: the
+canonical Vercel hostname returns `DEPLOYMENT_NOT_FOUND`, while the successful deployment of
+`173f85bf107a4ee6986c62434b17ae2b8fa2ba25` redirects anonymous users to Vercel SSO. No production
+storage, OAuth, or confirmation secret was deployed. Live Alexa+ and live AWS remain unverified.
+
+## Implemented in Milestone 8
+
+- Rewrote the README around the ten-second judge message, exact deterministic demo command,
+  implemented architecture, trust differentiator, meaningful DynamoDB role, verification labels,
+  limitations, and direct submission-evidence links.
+- Refined `scripts/build_proof_card_validation.py` rather than creating a competing demo path. It
+  now generates a local recording index plus a secret-free `demo-results.json`; all proof cards
+  still use the production MCP App and real local lifecycle/verifier results.
+- Added two deterministic demo-package tests proving the three canonical verdict/consumer/lifecycle
+  mappings, all recording links, explicit non-live labels, and absence of the local signing secret
+  from generated HTML/JSON.
+- Replaced the abbreviated license notice with the byte-identical canonical Apache-2.0 text from
+  `apache.org`; GitHub license detection must be rechecked after push.
+- Replaced the stale demo outline, judging map, and planned-tool feedback with submission-ready
+  material. Removed false Bedrock/AgentCore/Strands implementation claims and explicitly states
+  that those services are not part of the submitted architecture.
+- Added polished submission copy, a final verification matrix, exact screenshot list, Devpost
+  checklist, and manual external actions. Preserved the hackathon-window/CUF provenance boundary.
+- Re-verified the official Devpost rules on 2026-09-06: Alexa+ self-hosted MCP `2025-11-25+`,
+  Streamable HTTP/runtime use, public source and detectable license, English public video under
+  three minutes, prior-work disclosure, product feedback, and documented AWS Builder use.
+- Reviewed the friction log and kept its genuine reproducible entries; no bonus-oriented friction
+  was invented.
+
+## Milestone 8 validation commands
+
+```bash
+PYTHONPATH=src uv run --no-editable pytest -q tests/test_demo_submission.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_demo_submission.py tests/test_proof_card.py \
+  tests/test_alexa_integration.py tests/test_mcp_server.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_aws_infrastructure.py tests/test_dynamodb_repository.py \
+  tests/test_resolution_lifecycle.py tests/test_durable_repository.py \
+  tests/test_cancellation_verifier.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_confirmation_attestation.py tests/test_adversarial_security.py
+demo_dir=$(mktemp -d /tmp/closeloop-m8-final.XXXXXX)
+PYTHONPATH=src uv run --no-editable python \
+  scripts/build_proof_card_validation.py "$demo_dir"
+PYTHONPATH=src uv run --no-editable pytest -q
+git diff --check
+```
+
+Final results:
+
+- focused demo-package: `2 passed`;
+- combined demo/MCP/UI: `30 passed`;
+- AWS/lifecycle/verifier: `46 passed`;
+- confirmation/adversarial security: `109 passed`;
+- demo manifest: healthy `PASS / Verified`; false-success `FAIL / Not completed`; evidence outage
+  `INCONCLUSIVE / Awaiting proof`;
+- generated-artifact scan: no local validation secret or compact attestation; non-live Alexa+/AWS
+  labels preserved;
+- canonical Apache-2.0 checksum: local and `https://www.apache.org/licenses/LICENSE-2.0.txt`
+  matched exactly;
+- local Markdown links and `git diff --check`: passed;
+- dependency lock and compilation: passed (`62` packages resolved);
+- complete suite: `185 passed`, with the unchanged non-failing Starlette/anyio deprecation warning;
+- final Governor review: passed after correcting the test count, simulated-state wording, Vercel
+  evidence scope, and release-state labels; no BLOCKING/HIGH finding remains.
+
+## Milestone 8 external blockers and manual completion
+
+- Record the scripted video, keep it below 180 seconds, upload it publicly to YouTube/Vimeo, and
+  verify it signed out. No public video URL exists yet.
+- Confirm the final GitHub repository is public and its Apache-2.0 license is visible in About;
+  remove the broken repository homepage or replace it only with an anonymously verified URL.
+- Paste `docs/submission-copy.md`, product feedback, and genuine friction entries into Devpost;
+  choose Alexa+ plus AWS Builder, replace the video placeholder, upload the listed screenshots, and
+  verify every link signed out.
+- Do not publish the SSO-gated Vercel deployment as a demo. A safe public service requires shared
+  production storage, OAuth/account linking, and a trusted confirmation authority; test/recording
+  keys must never be deployed.
+- Live Alexa+ client/add-on/Local Inspector rendering and live AWS remain NOT VERIFIED. Position the
+  current entry as a working self-hosted MCP server with local integration evidence, not a live
+  Alexa+ deployment.
+
+## Milestone 8 changed repository files
+
+- `HACKATHON_REQUIREMENTS.md`
+- `HANDOFF.md`
+- `LICENSE`
+- `README.md`
+- `apps/demo-provider/README.md`
+- `apps/mcp-app/README.md`
+- `apps/mcp-server/README.md`
+- `docs/architecture.md`
+- `docs/build-provenance.md`
+- `docs/demo-script.md`
+- `docs/judging-rubric-map.md`
+- `docs/product-feedback.md`
+- `docs/submission-checklist.md`
+- `docs/submission-copy.md`
+- `docs/verification-matrix.md`
+- `scripts/build_proof_card_validation.py`
+- `tests/test_demo_submission.py`
+
+## Historical Milestone 7 checkpoint
 
 ## Implemented in Milestone 7
 
@@ -689,7 +792,7 @@ The exact requested initializer was run from the repository root:
 npx -y @amazon-devices/amazon-devices-buildertools-mcp@latest init-context
 ```
 
-Interactive choices were Codex, update `/Users/colbyweiss/.codex/config.toml`, use the repository
+Interactive choices were Codex, update `~/.codex/config.toml`, use the repository
 root for the context file, and opt out of a project identifier. The initializer reported MCP
 package version `1.0.10` and wrote:
 
@@ -697,7 +800,7 @@ package version `1.0.10` and wrote:
 - repository `.adbt-config.json` containing the private/opt-out identifier;
 - an enabled `amazon-devices-buildertools-mcp` `npx` stanza in the global Codex config;
 - 12 Amazon Devices Vega skills plus the Amazon Developers community
-  `vega-multi-tv-migration` skill under `/Users/colbyweiss/.agents/skills`.
+  `vega-multi-tv-migration` skill under `~/.agents/skills`.
 
 Every installed file was inventoried. The files are text/JSON templates, their JSON files parse,
 no installed file is executable, and the 12 packaged skills share the same license. The skill
@@ -720,7 +823,7 @@ npx -y @amazon-devices/amazon-devices-buildertools-mcp@latest exec --list
 ```
 
 `check-status` detected Codex, context document v4.0 at the repository `AGENTS.md`, and a configured
-MCP entry in `/Users/colbyweiss/.codex/config.toml`; Codex was the one fully configured agent. The
+MCP entry in `~/.codex/config.toml`; Codex was the one fully configured agent. The
 read-only tool inventory launched successfully and returned nine tools. The MCP server is therefore
 configured and launchable. Because this Codex task began before the global configuration changed,
 native MCP tools require a newly started Codex session; the CLI inventory was used for the current

@@ -15,6 +15,37 @@ Target stackable mini-prize: AWS Builder, where the AWS integration is substanti
 - Clear documentation of what was built during the hackathon window versus pre-existing concepts/components.
 - Product feedback/friction notes for Amazon/AWS/Alexa tooling used.
 
+## Final rules verification — 2026-09-06
+
+The [official rules](https://amazonappdev2026.devpost.com/rules),
+[hackathon overview](https://amazonappdev2026.devpost.com/), and
+[resources](https://amazonappdev2026.devpost.com/resources) were checked again for Milestone 8.
+Current submission requirements that materially affect CloseLoop are:
+
+- Submission deadline: **October 23, 2026 at 12:00 PM PDT**.
+- Alexa+ accepts a working self-hosted MCP server using Streamable HTTP and MCP `2025-11-25` or
+  later. The repository must actually import/call the required runtime technology, not merely name
+  it in documentation, and the video must show the project functioning.
+- The public GitHub repository must include all source, assets, and instructions plus a detectable
+  open-source license visible at the top/About area. The abbreviated Apache notice was replaced by
+  canonical Apache-2.0 text for final submission.
+- The public English demonstration video must be under three minutes, hosted on YouTube or Vimeo,
+  and avoid third-party trademarks/copyrighted material without permission. Judges need not watch
+  beyond three minutes and may judge solely from the text, images, and video.
+- If prior work existed, the submission must explain significant work completed during the
+  submission window. CloseLoop’s CUF conceptual provenance remains explicitly disclosed.
+- Product feedback must identify each tool/API/SDK used, what worked, what needs work, onboarding
+  experience, and whether the entrant would use it again.
+- AWS Builder requires the submission to name the AWS service and explain its use. DynamoDB’s
+  authoritative lifecycle/evidence responsibility is documented; it is not presented as live AWS.
+- Optional friction entries must include the attempted task, expected/actual behavior, severity,
+  workaround, and actionable recommendation. Genuine entries may contribute up to a 10% bonus.
+
+The code/runtime hook is locally integration verified through the official MCP SDK and Inspector,
+but no Alexa+ client/add-on/Local Inspector connected. The recording must therefore show the real
+local MCP lifecycle and preserve its simulation labels. A live Alexa+ claim, public deployment
+claim, or video URL remains prohibited until independently verified.
+
 ## Alexa+ / MCP implementation target
 The project should use the hackathon-supported Alexa+/MCP path rather than a fake wrapper.
 

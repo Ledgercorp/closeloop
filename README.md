@@ -1,92 +1,145 @@
 # CloseLoop
 
-**Alexa+ can take action. CloseLoop verifies the outcome before it calls the job done.**
+**CloseLoop doesn’t trust an agent saying it finished. It independently checks the result before Alexa+ tells you the task is done.**
 
-CloseLoop is a hackathon project for the Amazon Build, Ship, Shape 2026 Alexa+ track. It is a consumer-facing verified-resolution agent: the action plane can attempt consequential life-admin tasks, but it is structurally unable to declare success. A separate deterministic verification plane decides whether the requested real-world outcome is proven.
+> Alexa+ can take action. CloseLoop makes sure “done” actually means done.
 
-## Core semantics
+CloseLoop is a consumer-facing verified-resolution agent for consequential life-admin tasks. The
+demo cancels a subscription, reads the resulting account state through a separate evidence path,
+and lets deterministic code—not the agent or provider—produce one of three outcomes:
 
 - `PASS` → **Verified**
 - `FAIL` → **Not completed**
 - `INCONCLUSIVE` → **Awaiting proof**
 
-The flagship demo is subscription cancellation. A simulated provider can report success while leaving auto-renew enabled; CloseLoop must detect that contradiction and refuse to call the task done.
+The memorable case is false success: the provider says cancellation worked, independent read-back
+shows auto-renew is still on, and CloseLoop refuses to call the task done.
 
-## Hackathon targets
+Primary track: **Alexa+** · Mini challenge: **AWS Builder** · License: [Apache-2.0](LICENSE)
 
-- Primary: **Alexa+**
-- Mini-challenge: **AWS Builder**
-- Demo: under 3 minutes, voice-first, with PASS / FAIL / INCONCLUSIVE fault injection
+## Run the deterministic demo
 
-## Repository status
-
-This repository contains the deterministic resolution core, fault-injection demo provider,
-and an Alexa+-oriented MCP action lifecycle for subscription cancellation. The MCP service requires
-a signed, action-bound confirmation attestation before execution, records the provider claim separately from an
-independent read-back, and exposes only read access to the verifier's terminal result.
-
-Milestone 5 adds an optional Amazon DynamoDB repository as the authoritative shared store for
-owner-scoped lifecycle state and evidence. Atomic conditional writes preserve confirmation,
-optimistic concurrency, and immutable terminal outcomes across server instances. A minimal
-CloudFormation template provisions one on-demand encrypted table; no AWS orchestration or model
-was added because it would not improve the current synchronous lifecycle.
-
-Milestone 4 adds closed conversation-ready output schemas, Alexa-compatible protected-resource
-discovery behavior, and a minimal read-only MCP Apps proof card. Standard MCP Inspector validation
-is complete. Live Alexa+ onboarding remains deferred because this environment lacks selected-partner
-Alexa AI CLI credentials, an Alexa-reachable HTTPS deployment, and an OAuth authorization server.
-The provider remains a clearly labeled in-process demo simulation; AWS orchestration, final UI work,
-and additional provider categories remain deferred. The DynamoDB path is simulated with boto3 and
-Moto, not live-AWS verified.
-
-Milestone 3 adds durable SQLite/PostgreSQL resolution storage, optimistic cross-instance
-transitions, immutable terminal outcomes, and owner isolation derived from authenticated bearer
-tokens. CloseLoop does not accept a caller-provided principal identifier and does not mint tokens.
-
-## Install and test
+Prerequisites: Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync --extra test --no-editable
-uv run --no-editable pytest -q
+uv sync --locked --extra test --no-editable
+demo_dir=$(mktemp -d /tmp/closeloop-demo.XXXXXX)
+PYTHONPATH=src uv run --no-editable python \
+  scripts/build_proof_card_validation.py "$demo_dir"
+cd "$demo_dir"
+python3 -m http.server 8768 --bind 127.0.0.1
 ```
 
-## Run the service
+Open `http://127.0.0.1:8768/`. The recording index links to confirmation and all three outcomes.
+Every terminal page is produced through the real in-process MCP server, lifecycle, repository,
+provider adapter, independent read-back, deterministic verifier, and production proof-card code.
+The provider and confirmation signer are explicitly local simulations; this is not a live Alexa+
+client, real subscription provider, or live AWS environment.
+
+The [sub-three-minute video script](docs/demo-script.md) gives the exact recording order and
+narration.
+
+## How it works
+
+```text
+MCP client (Alexa+ target)
+       │  bearer-authenticated Streamable HTTP /mcp
+       ▼
+five closed-schema tools ── trusted, action-bound confirmation
+       │
+       ▼
+execution plane ─────────── provider action receipt (claim only)
+       │
+       ▼
+independent read-back ───── resulting account evidence
+       │
+       ▼
+deterministic verifier ──── PASS / FAIL / INCONCLUSIVE
+       │
+       ├── SQL or DynamoDB authoritative lifecycle/evidence state
+       └── Alexa-ready structured result + read-only MCP Apps proof card
+```
+
+The public MCP surface has exactly five tools:
+
+- `start_resolution`
+- `confirm_resolution_action`
+- `get_resolution_status`
+- `get_resolution_evidence`
+- `list_open_resolutions`
+
+There is no `set_verdict`, `mark_success`, `force_pass`, or equivalent capability. The executor’s
+receipt is evidence, never the verdict. Consequential execution requires a signed, short-lived
+`closeloop.confirmation/v1` attestation bound to the authenticated owner, exact resolution, and
+canonical action digest. Replay, stale, tampered, cross-owner, and cross-resolution attestations
+fail closed.
+
+## Alexa+ integration
+
+CloseLoop is a self-hosted MCP server using the official MCP Python SDK. `/mcp` uses stateless
+Streamable HTTP and negotiates MCP `2025-11-25` plus the documented `2025-03-26` lifecycle example.
+It provides closed conversation-ready schemas, bearer authentication, RFC 9728 protected-resource
+metadata, safe errors, and a `ui://closeloop/proof-card.html` MCP Apps resource with meaningful
+text fallback.
+
+Verification level: **INTEGRATION VERIFIED locally**. Standard MCP Inspector and integration tests
+proved initialization, five-tool discovery, schemas, authenticated calls, resources, and all three
+outcomes. Alexa AI CLI/Local Inspector access, account linking, an Alexa-reachable public endpoint,
+and live Alexa+ rendering were unavailable, so CloseLoop does not claim live Alexa+ verification.
+
+## Why DynamoDB matters
+
+When `CLOSELOOP_DYNAMODB_TABLE` is configured, DynamoDB is the authoritative lifecycle and evidence
+store—not a decorative log. Owner-scoped keys, strongly consistent reads, and conditional writes
+protect ordering, replay resistance, cross-instance concurrency, and immutable terminal outcomes.
+The checked-in CloudFormation template creates one encrypted on-demand table with no running
+compute.
+
+Verification level: **SIMULATED** with boto3 and Moto. No live AWS table, IAM policy, or
+CloudFormation deployment was exercised. See [AWS design and deployment notes](docs/aws-dynamodb.md).
+
+## Run the service and tests
 
 ```bash
-uv run --no-editable uvicorn main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=src uv run --no-editable uvicorn main:app \
+  --host 127.0.0.1 --port 8000
+PYTHONPATH=src uv run --no-editable pytest -q
 ```
 
-The health endpoints remain at `/` and `/health`. The MCP service uses Streamable HTTP at
-`/mcp` and negotiates both Alexa's required `2025-11-25` version and the `2025-03-26` lifecycle
-example through the official MCP Python SDK. For a non-local host, set `CLOSELOOP_ALLOWED_HOSTS`; set
-`CLOSELOOP_ALLOWED_ORIGINS` when browser origins must be permitted. Both variables accept
-comma-separated exact values. Vercel's `VERCEL_URL` is trusted automatically.
+Health endpoints are `/` and `/health`; MCP is mounted at `/mcp`. Local development uses
+`.closeloop/resolutions.db`. Production/serverless operation requires shared PostgreSQL or DynamoDB,
+a bearer-token issuer, and a separate trusted confirmation authority. Missing production storage,
+authentication, or confirmation configuration fails closed. Never deploy the test or recording
+signing keys.
 
-Local development defaults to `.closeloop/resolutions.db`. For AWS-backed state, provision
-`infra/aws/closeloop-dynamodb.json`, then set `CLOSELOOP_DYNAMODB_TABLE` and `AWS_REGION` using the
-normal AWS SDK credential chain. An explicit DynamoDB table setting takes precedence over SQL URLs.
-See `docs/aws-dynamodb.md` for IAM, cost, and cleanup guidance. Other serverless deployments fail
-closed unless one of `CLOSELOOP_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` provides a shared
-PostgreSQL database. MCP requests also fail closed unless `CLOSELOOP_AUTH_SECRET` is at least
-32 bytes. Configure `CLOSELOOP_AUTH_ISSUER` and `CLOSELOOP_AUTH_AUDIENCE` to match the external
-token issuer. Tokens must use HS256, contain `iss`, `aud`, `sub`, `iat`, and `exp`, and include
-the `closeloop:resolutions` scope. Health routes remain unauthenticated.
+The final package has **185 passing tests** (the Milestone 7 baseline was 183). Security is
+**PARTIALLY ADVERSARIAL VERIFIED**:
+109 focused adversarial/confirmation cases cover verdict manipulation, authorization isolation,
+confirmation replay and tampering, lifecycle races, forged evidence, MCP abuse, UI injection,
+information leakage, and failure behavior. Seven blocking findings were fixed. See the
+[verification matrix](docs/verification-matrix.md) and [security report](docs/adversarial-security.md).
 
-Consequential confirmation also fails closed unless `CLOSELOOP_CONFIRMATION_SECRET` is at least
-32 bytes and `CLOSELOOP_CONFIRMATION_ISSUER` plus `CLOSELOOP_CONFIRMATION_AUDIENCE` identify a
-separately trusted confirmation authority. The required compact HS256 attestation is a
-`closeloop.confirmation/v1` contract bound to the bearer-derived subject, exact resolution and
-action digest, affirmative decision, issue/expiry times, and unique ID. The authority must obtain
-the human decision independently; it must never sign fields merely because an MCP agent supplied
-them. Test and browser-validation signers are explicitly local-only and are not production trust.
+## Submission evidence
 
-This JWT configuration is a resource-server boundary, not Alexa+ account linking. A live add-on
-still requires a compatible external OAuth 2.1 authorization server, public HTTPS endpoint, and
-Alexa+ developer onboarding. The minimal proof card imports the official MCP Apps client from a
-pinned CDN URL; its protocol/resource contract is tested, but it has not been rendered by Alexa.
+- [Submission-ready copy](docs/submission-copy.md)
+- [Three-minute storyboard](docs/demo-script.md)
+- [Judging rubric map](docs/judging-rubric-map.md)
+- [Verification matrix](docs/verification-matrix.md)
+- [Screenshot and submission checklist](docs/submission-checklist.md)
+- [Product feedback](docs/product-feedback.md)
+- [Friction log](docs/friction-log.md)
+- [Build provenance](docs/build-provenance.md)
+- [Trust model](docs/trust-model.md)
 
-## Design rule
+The repository is public, but its current Vercel deployment is not an eligible public demo: the
+canonical homepage returns `DEPLOYMENT_NOT_FOUND`, and the latest successful deployment is protected
+by Vercel SSO. The local demo above is the strongest safe path until production storage, OAuth,
+confirmation-authority configuration, and public hosting are available.
 
-> Tool success is evidence. It is never the verdict.
+## Provenance and license
 
-The action plane does not expose any `set_verdict` capability. Only the independent verifier may produce the final outcome.
+CloseLoop was built during the 2026 hackathon window. It draws on prior conceptual experience with
+evidence-based PASS/FAIL/INCONCLUSIVE verification, but no source from the earlier CUF project was
+copied. Details are in [build provenance](docs/build-provenance.md).
+
+Licensed under [Apache License 2.0](LICENSE).

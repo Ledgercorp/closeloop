@@ -13,8 +13,10 @@ It exposes exactly:
 
 The transport is stateless Streamable HTTP and negotiates MCP `2025-11-25` and `2025-03-26`
 through the official SDK. Consequential execution occurs only in
-`confirm_resolution_action` after `confirmed=true`. Unexpected input fields are rejected,
-so callers cannot smuggle a verdict or terminal status into an action call.
+`confirm_resolution_action` after `confirmed=true` and verification of a short-lived signed
+attestation bound to the authenticated owner, resolution, and canonical action digest. Missing
+production authority configuration denies every confirmation. Unexpected input fields are
+rejected, so callers cannot smuggle a verdict or terminal status into an action call.
 
 Resolution state is durable through SQL or an optional Amazon DynamoDB repository. Local
 development uses file-backed SQLite; a shared PostgreSQL URL or explicit DynamoDB table supports
@@ -37,5 +39,6 @@ and a pinned CDN dependency on the official MCP Apps client. Its resource contra
 with MCP Inspector, but it was not rendered by the unavailable Alexa+ Local Inspector.
 
 The provider remains a labeled demo simulation. The DynamoDB repository was validated with Moto,
-not a live AWS account. Live Alexa+ onboarding, AWS orchestration, and real provider execution
-remain later work. The deterministic verifier remains the sole verdict producer.
+not a live AWS account. Live Alexa+ onboarding, account linking, trusted confirmation issuance,
+and real provider execution remain unverified. The deterministic verifier remains the sole verdict
+producer.

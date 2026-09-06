@@ -1,34 +1,32 @@
 # Architecture
 
-## Target end-state
+## Implemented architecture
 
 ```text
-User
+MCP client (Alexa+ target)
+  ↓ bearer-authenticated Streamable HTTP
+CloseLoop MCP server (five tools)
+  ↓ trusted action-bound confirmation
+Demo provider action → action receipt (claim)
   ↓
-Alexa+
+Independent provider read-back → resulting-state evidence
   ↓
-CloseLoop MCP add-on
-  ↓
-Action orchestrator (Bedrock + Strands)
-  ↓
-AgentCore Gateway → AgentCore Policy → Browser/API action
-  ↓
-Action receipt
-
-Independent verification plane
-  ↓
-Read-back / evidence collector
-  ↓
-Deterministic evaluator
+Deterministic verifier
   ↓
 PASS / FAIL / INCONCLUSIVE
   ↓
 Verified / Not completed / Awaiting proof
-  ↓
-Alexa+ voice response + MCP App proof card
+  ├─ conversation-ready structured/text result
+  ├─ read-only MCP Apps proof card
+  └─ SQL or optional DynamoDB lifecycle/evidence persistence
 ```
 
-## Planned MCP tools
+The provider is a labeled local simulation. DynamoDB is implemented but Moto-simulated; Alexa+
+contracts are locally integration verified without a live Alexa+ host. Bedrock, AgentCore, Strands,
+Lambda, Step Functions, and EventBridge are not implemented and are not part of the submission
+architecture.
+
+## MCP tools
 
 - `start_resolution`
 - `confirm_resolution_action`
@@ -49,9 +47,10 @@ REQUESTED -> AWAITING_CONFIRMATION -> EXECUTING -> VERIFYING
 ```
 
 `start_resolution` stops at `AWAITING_CONFIRMATION`. Only
-`confirm_resolution_action(confirmed=true)` may invoke the demo mutation. It then records
-the execution receipt, performs a separate read-back, and passes both into the existing
-deterministic verifier. Status, evidence, and list tools are read-only.
+`confirm_resolution_action(confirmed=true)` may invoke the demo mutation only with a valid trusted
+confirmation attestation bound to the authenticated owner, exact resolution, and canonical action
+digest. It then records the execution receipt, performs a separate read-back, and passes both into
+the deterministic verifier. Status, evidence, and list tools are read-only.
 
 ## Milestone 3 persistence and authorization
 
@@ -82,7 +81,7 @@ The existing service remains a self-hosted Streamable HTTP MCP server. Alexa+-sp
 is kept at the contract edge:
 
 ```text
-Alexa+/MCP client -> protected-resource discovery -> bearer-authenticated /mcp
+MCP client (Alexa+ target) -> protected-resource discovery -> bearer-authenticated /mcp
                                                      |
                  trusted confirmation attestation -> closed schemas + five tools
                                                      |

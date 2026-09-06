@@ -120,6 +120,71 @@ def _host_html(name: str, structured_content: dict[str, object]) -> str:
 """
 
 
+def _index_html() -> str:
+    """Return a recording index that links to the exact production-card fixtures."""
+
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CloseLoop local demo</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; background: #eef3f2; color: #102622; }
+    main { width: min(920px, calc(100% - 32px)); margin: 48px auto; }
+    .eyebrow { color: #32665c; font-size: .78rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 10px 0 12px; max-width: 780px; font-size: clamp(2rem, 5vw, 4rem); line-height: 1.02; }
+    .lede { max-width: 720px; font-size: 1.15rem; line-height: 1.6; }
+    .notice { margin: 28px 0; padding: 16px 18px; border: 1px solid #a7c5be; border-radius: 14px; background: #fff; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+    a { display: block; min-height: 145px; padding: 20px; border: 1px solid #c5d6d2; border-radius: 18px; background: #fff; color: inherit; text-decoration: none; box-shadow: 0 8px 28px rgba(16, 38, 34, .07); }
+    a:hover, a:focus-visible { border-color: #32665c; outline: 3px solid #9fd4c7; outline-offset: 2px; }
+    .step { color: #58726c; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    h2 { margin: 10px 0 8px; font-size: 1.35rem; }
+    p { margin: 0; line-height: 1.5; }
+    footer { margin-top: 28px; color: #58726c; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">CloseLoop recording index</div>
+    <h1>Don't trust “done.” Verify it.</h1>
+    <p class="lede">CloseLoop separates an action provider's claim from independent read-back evidence before it reports a consequential task complete.</p>
+    <div class="notice"><strong>Local demonstration.</strong> These pages use the real CloseLoop MCP lifecycle, production proof-card code, deterministic verifier, a simulated provider, and a local-only confirmation signer. They are not an Alexa+ host or live provider.</div>
+    <div class="grid">
+      <a href="confirmation.html"><span class="step">Step 1</span><h2>Confirmation required</h2><p>No consequential action has run.</p></a>
+      <a href="healthy.html"><span class="step">Case A · PASS</span><h2>Verified</h2><p>Independent read-back confirms auto-renew is off.</p></a>
+      <a href="false_success.html"><span class="step">Case B · FAIL</span><h2>Not completed</h2><p>The provider claims success; read-back catches the contradiction.</p></a>
+      <a href="evidence_outage.html"><span class="step">Case C · INCONCLUSIVE</span><h2>Awaiting proof</h2><p>CloseLoop refuses to invent certainty when evidence is unavailable.</p></a>
+    </div>
+    <footer>Open each card and expand “View evidence and provenance” during recording.</footer>
+  </main>
+</body>
+</html>
+"""
+
+
+def _demo_manifest(results: dict[str, dict[str, object]]) -> dict[str, object]:
+    """Summarize real generated outcomes without exporting tokens or secrets."""
+
+    return {
+        "verification_level": "LOCAL UI/BROWSER VERIFIED",
+        "provider": "simulated demo provider",
+        "confirmation": "local-only signer with the production verifier contract",
+        "live_alexa_plus": False,
+        "live_aws": False,
+        "cases": {
+            name: {
+                "verdict": results[name]["verification"]["verdict"],
+                "consumer_state": results[name]["consumer_state"],
+                "lifecycle_state": results[name]["lifecycle_state"],
+            }
+            for name in ("healthy", "false_success", "evidence_outage")
+        },
+    }
+
+
 async def _real_results(database_path: Path) -> dict[str, dict[str, object]]:
     repository = SqlResolutionRepository(f"sqlite+pysqlite:///{database_path}")
     confirmation_verifier = HmacJwtConfirmationAttestationVerifier(
@@ -216,6 +281,11 @@ async def _build(output_dir: Path) -> None:
         (output_dir / f"{name}.html").write_text(
             _host_html(name, structured_content), encoding="utf-8"
         )
+    (output_dir / "index.html").write_text(_index_html(), encoding="utf-8")
+    (output_dir / "demo-results.json").write_text(
+        json.dumps(_demo_manifest(results), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> None:

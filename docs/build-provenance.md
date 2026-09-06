@@ -17,11 +17,12 @@ CloseLoop is a new, consumer-facing Alexa+-specific product. It is not a repacka
 - Independent deterministic cancellation verifier
 - First-party demo provider with healthy / false-success / evidence-outage modes
 - Consumer state mapping: Verified / Not completed / Awaiting proof
-- Fault-injection tests
-- Alexa+ integration plan
+- Fault-injection, lifecycle, protocol, persistence, UI, and adversarial security tests
+- Alexa+-compatible self-hosted MCP server with five tools and protected-resource metadata
+- Trusted, action-bound confirmation-attestation boundary
+- Read-only MCP Apps proof card and local AppBridge validation path
 - AWS DynamoDB state/evidence repository and infrastructure template
-- Judging rubric map
-- Friction log and product feedback templates
+- Submission-ready demo, judging, verification, friction, and product-feedback evidence
 
 ## Reused source
 

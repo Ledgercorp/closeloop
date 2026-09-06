@@ -7,4 +7,5 @@ It intentionally supports three deterministic modes:
 - false_success
 - evidence_outage
 
-A browser-visible sandbox provider will be added later for the AgentCore Browser demo.
+The provider is intentionally local and deterministic for the recorded demo. No AgentCore Browser
+or live subscription-provider integration is implemented or claimed.
