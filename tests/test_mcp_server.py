@@ -360,8 +360,33 @@ def test_fastapi_vercel_baseline_remains_valid(tmp_path):
         health = client.get("/health")
     assert root.status_code == 200
     assert root.json()["status"] == "ok"
+    assert root.json()["demo"] == "/demo/"
     assert health.status_code == 200
     assert health.json() == {"status": "healthy"}
+
+
+def test_public_demo_is_read_only_labeled_and_secret_free(tmp_path):
+    settings, verifier = make_auth()
+    app = create_app(make_service(tmp_path), settings, verifier)
+    with TestClient(app) as client:
+        index = client.get("/demo/")
+        healthy = client.get("/demo/healthy.html")
+        manifest = client.get("/demo/demo-results.json")
+        unauthorized_mcp = client.post(
+            "/mcp",
+            headers=protocol_headers(),
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+        )
+
+    assert index.status_code == 200
+    assert "Public deterministic demonstration" in index.text
+    assert "local-validation-only-confirmation-secret" not in index.text
+    assert healthy.status_code == 200
+    assert "CloseLoop proof card" in healthy.text
+    assert manifest.status_code == 200
+    assert manifest.json()["live_alexa_plus"] is False
+    assert manifest.json()["live_aws"] is False
+    assert unauthorized_mcp.status_code == 401
 
 
 def test_alexa_root_and_sdk_protected_resource_metadata_are_available(tmp_path):

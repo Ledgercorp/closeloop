@@ -13,6 +13,7 @@ import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from uuid import uuid4
 
 import jwt
@@ -33,6 +34,12 @@ INTENT = "Cancel my subscription and make sure I will not be charged again."
 VALIDATION_CONFIRMATION_SECRET = "local-validation-only-confirmation-secret-32-bytes"
 VALIDATION_CONFIRMATION_ISSUER = "https://confirmation.validation.local"
 VALIDATION_CONFIRMATION_AUDIENCE = "https://closeloop.validation/confirmation"
+PUBLIC_DEMO_CASES = (
+    "confirmation",
+    "healthy",
+    "false_success",
+    "evidence_outage",
+)
 
 
 def _validation_attestation(status: dict[str, object]) -> str:
@@ -120,10 +127,10 @@ def _host_html(name: str, structured_content: dict[str, object]) -> str:
 """
 
 
-def _index_html() -> str:
+def _index_html(*, public_bundle: bool = False) -> str:
     """Return a recording index that links to the exact production-card fixtures."""
 
-    return """<!doctype html>
+    html = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -163,6 +170,18 @@ def _index_html() -> str:
 </body>
 </html>
 """
+    if not public_bundle:
+        return html
+    return html.replace(
+        "<title>CloseLoop local demo</title>",
+        "<title>CloseLoop deterministic demo</title>",
+    ).replace(
+        "<div class=\"eyebrow\">CloseLoop recording index</div>",
+        "<div class=\"eyebrow\">CloseLoop judge demo</div>",
+    ).replace(
+        "<strong>Local demonstration.</strong> These pages use the real CloseLoop MCP lifecycle, production proof-card code, deterministic verifier, a simulated provider, and a local-only confirmation signer. They are not an Alexa+ host or live provider.",
+        "<strong>Public deterministic demonstration.</strong> These static pages were generated through the real CloseLoop MCP lifecycle, production proof-card code, deterministic verifier, a simulated provider, and a local-only build signer. The signer and compact attestations are not deployed. This is not an Alexa+ host, live provider, or live AWS deployment.",
+    )
 
 
 def _demo_manifest(results: dict[str, dict[str, object]]) -> dict[str, object]:
@@ -274,14 +293,21 @@ async def _real_results(database_path: Path) -> dict[str, dict[str, object]]:
     return results
 
 
-async def _build(output_dir: Path) -> None:
+async def _build(output_dir: Path, *, public_bundle: bool = False) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    results = await _real_results(output_dir / "validation.db")
-    for name, structured_content in results.items():
+    if public_bundle:
+        with TemporaryDirectory(prefix="closeloop-public-demo-") as temporary_dir:
+            results = await _real_results(Path(temporary_dir) / "validation.db")
+    else:
+        results = await _real_results(output_dir / "validation.db")
+    case_names = PUBLIC_DEMO_CASES if public_bundle else tuple(results)
+    for name in case_names:
         (output_dir / f"{name}.html").write_text(
-            _host_html(name, structured_content), encoding="utf-8"
+            _host_html(name, results[name]), encoding="utf-8"
         )
-    (output_dir / "index.html").write_text(_index_html(), encoding="utf-8")
+    (output_dir / "index.html").write_text(
+        _index_html(public_bundle=public_bundle), encoding="utf-8"
+    )
     (output_dir / "demo-results.json").write_text(
         json.dumps(_demo_manifest(results), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -291,8 +317,15 @@ async def _build(output_dir: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output_dir", type=Path)
+    parser.add_argument(
+        "--public-bundle",
+        action="store_true",
+        help="write only the secret-free canonical judge-demo pages",
+    )
     args = parser.parse_args()
-    asyncio.run(_build(args.output_dir.resolve()))
+    asyncio.run(
+        _build(args.output_dir.resolve(), public_bundle=args.public_bundle)
+    )
 
 
 if __name__ == "__main__":

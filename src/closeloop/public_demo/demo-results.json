@@ -1,0 +1,24 @@
+{
+  "cases": {
+    "evidence_outage": {
+      "consumer_state": "Awaiting proof",
+      "lifecycle_state": "AWAITING_PROOF",
+      "verdict": "INCONCLUSIVE"
+    },
+    "false_success": {
+      "consumer_state": "Not completed",
+      "lifecycle_state": "NOT_COMPLETED",
+      "verdict": "FAIL"
+    },
+    "healthy": {
+      "consumer_state": "Verified",
+      "lifecycle_state": "VERIFIED",
+      "verdict": "PASS"
+    }
+  },
+  "confirmation": "local-only signer with the production verifier contract",
+  "live_alexa_plus": false,
+  "live_aws": false,
+  "provider": "simulated demo provider",
+  "verification_level": "LOCAL UI/BROWSER VERIFIED"
+}

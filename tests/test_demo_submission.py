@@ -4,6 +4,7 @@ import asyncio
 import json
 
 from scripts.build_proof_card_validation import (
+    PUBLIC_DEMO_CASES,
     VALIDATION_CONFIRMATION_SECRET,
     _build,
 )
@@ -57,3 +58,21 @@ def test_submission_demo_does_not_export_local_signing_secret(tmp_path):
     assert VALIDATION_CONFIRMATION_SECRET not in generated_text
     assert "live_alexa_plus\": true" not in generated_text
     assert "live_aws\": true" not in generated_text
+
+
+def test_public_demo_bundle_contains_only_canonical_secret_free_artifacts(tmp_path):
+    asyncio.run(_build(tmp_path, public_bundle=True))
+
+    generated_files = {path.name for path in tmp_path.iterdir()}
+    assert generated_files == {
+        "demo-results.json",
+        "index.html",
+        *(f"{name}.html" for name in PUBLIC_DEMO_CASES),
+    }
+    generated_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in tmp_path.iterdir()
+    )
+    assert "Public deterministic demonstration" in generated_text
+    assert "The signer and compact attestations are not deployed" in generated_text
+    assert VALIDATION_CONFIRMATION_SECRET not in generated_text
+    assert "validation.db" not in generated_files

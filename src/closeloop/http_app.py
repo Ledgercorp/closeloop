@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
@@ -78,6 +80,7 @@ def create_app(
             "name": "CloseLoop",
             "status": "ok",
             "message": "CloseLoop verification service is live.",
+            "demo": "/demo/",
         }
 
     @app.get("/health")
@@ -94,6 +97,13 @@ def create_app(
             "scopes_supported": list(auth_settings.required_scopes or []),
             "bearer_methods_supported": ["header"],
         }
+
+    public_demo_dir = Path(__file__).with_name("public_demo")
+    app.mount(
+        "/demo",
+        StaticFiles(directory=public_demo_dir, html=True),
+        name="public-demo",
+    )
 
     # Mount the complete MCP ASGI app so its authentication middleware remains
     # in the request path; copying only its routes would discard that boundary.
