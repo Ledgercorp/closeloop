@@ -4,6 +4,8 @@ import json
 
 from mcp.server.apps import Apps, ResourceCsp
 
+from .verifier import MAX_EVIDENCE_AGE_SECONDS
+
 
 PROOF_CARD_URI = "ui://closeloop/proof-card.html"
 
@@ -518,6 +520,77 @@ _PROOF_CARD_TEMPLATE = r"""<!doctype html>
     const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
     const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
     const label = (value) => String(value ?? "not available").replaceAll("_", " ").toLowerCase();
+    const maxEvidenceAgeSeconds = __MAX_EVIDENCE_AGE_SECONDS__;
+
+    const validTimestamp = (value) =>
+      typeof value === "string" && !Number.isNaN(Date.parse(value));
+
+    const validCalendarDate = (value) => {
+      if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const [year, month, day] = value.split("-").map(Number);
+      const parsed = new Date(Date.UTC(year, month - 1, day));
+      return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 &&
+        parsed.getUTCDate() === day;
+    };
+
+    const derivedEvidenceVerdict = (execution, readBack) => {
+      if (!isObject(execution) || !isObject(readBack)) return null;
+      if (
+        execution.evidence_type !== "execution_claim" ||
+        execution.source !== "demo_provider.cancel_subscription" ||
+        typeof execution.request_id !== "string" || !execution.request_id.trim() ||
+        typeof execution.provider_reported_success !== "boolean" ||
+        typeof execution.message !== "string" || !validTimestamp(execution.observed_at)
+      ) return null;
+      if (
+        readBack.evidence_type !== "independent_read_back" ||
+        readBack.source !== "demo_provider.read_cancellation_evidence" ||
+        typeof readBack.account_readable !== "boolean" ||
+        (readBack.auto_renew !== null && typeof readBack.auto_renew !== "boolean") ||
+        (readBack.effective_end_date !== null &&
+          !validCalendarDate(readBack.effective_end_date)) ||
+        (readBack.freshness_seconds !== null &&
+          (!Number.isInteger(readBack.freshness_seconds) || readBack.freshness_seconds < 0)) ||
+        !validTimestamp(readBack.observed_at)
+      ) return null;
+      if (readBack.account_readable !== true) return "INCONCLUSIVE";
+      if (
+        readBack.freshness_seconds === null ||
+        readBack.freshness_seconds > maxEvidenceAgeSeconds
+      ) return "INCONCLUSIVE";
+      if (readBack.auto_renew === true) return "FAIL";
+      if (execution.provider_reported_success !== true) return "INCONCLUSIVE";
+      if (readBack.auto_renew === false && readBack.effective_end_date !== null) return "PASS";
+      return "INCONCLUSIVE";
+    };
+
+    const validTerminalHistory = (history, terminalState) => {
+      const expected = [
+        "REQUESTED", "AWAITING_CONFIRMATION", "EXECUTING", "VERIFYING", terminalState
+      ];
+      if (!Array.isArray(history) || history.length !== expected.length) return false;
+      let previousTime = Number.NEGATIVE_INFINITY;
+      return history.every((transition, index) => {
+        if (
+          !isObject(transition) || transition.state !== expected[index] ||
+          !validTimestamp(transition.occurred_at)
+        ) return false;
+        const currentTime = Date.parse(transition.occurred_at);
+        if (currentTime < previousTime) return false;
+        previousTime = currentTime;
+        return true;
+      });
+    };
+
+    const validTerminalEvidence = (data, verdict) => {
+      const verifier = data.verification;
+      if (
+        !isObject(verifier) || verifier.verifier !== "closeloop.verify_cancellation/v1" ||
+        typeof verifier.reason !== "string" || !validTimestamp(verifier.evaluated_at)
+      ) return false;
+      return derivedEvidenceVerdict(data.execution_claim, data.independent_read_back) === verdict &&
+        validTerminalHistory(data.state_history, data.lifecycle_state);
+    };
 
     const consistentValue = (first, second) => {
       const hasFirst = first !== undefined && first !== null;
@@ -573,7 +646,8 @@ _PROOF_CARD_TEMPLATE = r"""<!doctype html>
         if (
           !rule || lifecycle !== rule.lifecycleState || consumerState !== rule.consumerState ||
           verification !== verdict || execution !== "completed" ||
-          (statusShape && (isTerminal !== true || confirmationRequired !== false))
+          (statusShape && (isTerminal !== true || confirmationRequired !== false)) ||
+          (evidenceShape && !validTerminalEvidence(data, verdict))
         ) return invalidView();
         return {
           valid: true,
@@ -810,7 +884,7 @@ _PROOF_CARD_TEMPLATE = r"""<!doctype html>
       renderHistory(view.valid ? payload.state_history : []);
     };
 
-    const app = new App({ name: "CloseLoop Proof Card", version: "0.6.0" }, {});
+    const app = new App({ name: "CloseLoop Proof Card", version: "0.7.0" }, {});
     app.ontoolresult = (result) => render(result.structuredContent);
     app.onhostcontextchanged = (context) => {
       if (context.theme) applyDocumentTheme(context.theme);
@@ -830,7 +904,7 @@ _PROOF_CARD_TEMPLATE = r"""<!doctype html>
 PROOF_CARD_HTML = _PROOF_CARD_TEMPLATE.replace(
     "__OUTCOME_RULES__",
     json.dumps(PROOF_CARD_OUTCOME_RULES, ensure_ascii=False, separators=(",", ":")),
-)
+).replace("__MAX_EVIDENCE_AGE_SECONDS__", str(MAX_EVIDENCE_AGE_SECONDS))
 
 
 def create_proof_card_extension() -> Apps:

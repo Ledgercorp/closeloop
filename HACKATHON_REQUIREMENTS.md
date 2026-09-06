@@ -60,6 +60,11 @@ Verified requirements and differences from the Milestone 3 assumptions:
 - CloseLoop's Milestone 3 HS256 verifier is only a resource-server boundary. It is not an OAuth
   authorization server and does not by itself satisfy Alexa+ account linking or service-level
   discovery. Do not treat locally minted test JWTs as Alexa+ credentials.
+- Re-review on 2026-09-06 confirmed that Alexa+ account linking authenticates user-specific/write
+  requests with authorization-code + PKCE S256 bearer tokens, but the public pages do not specify a
+  per-action human-confirmation attestation. CloseLoop therefore verifies a separate short-lived,
+  action-bound attestation from a configured trusted authorization/host boundary. This is a
+  CloseLoop security contract, not a claim that Alexa+ currently emits that token.
 - Tool names, descriptions, input schemas, and output schemas are promises to Alexa. Each tool must
   map to one meaningful customer intent, every parameter must be used, errors must always return
   useful data, and declared and returned output fields must remain synchronized.

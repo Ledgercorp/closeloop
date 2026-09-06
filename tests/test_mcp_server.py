@@ -12,6 +12,7 @@ from closeloop.http_app import create_app
 from closeloop.lifecycle import ResolutionService
 from closeloop.mcp_server import create_mcp_server
 from closeloop.repository import SqlResolutionRepository
+from tests.confirmation_support import trusted_confirmation
 
 
 EXPECTED_TOOLS = {
@@ -101,7 +102,19 @@ def test_exact_mcp_surface_is_registered_and_callable(tmp_path):
             confirm_input_schema = tools_by_name["confirm_resolution_action"].input_schema
             assert "principal_id" not in start_schema
             assert "verdict" not in start_schema
-            assert set(confirm_input_schema["properties"]) == {"resolution_id", "confirmed"}
+            assert set(confirm_input_schema["properties"]) == {
+                "resolution_id",
+                "confirmed",
+                "confirmation_attestation",
+            }
+            assert set(confirm_input_schema["required"]) == {
+                "resolution_id",
+                "confirmed",
+                "confirmation_attestation",
+            }
+            assert confirm_input_schema["properties"]["confirmation_attestation"][
+                "maxLength"
+            ] == 4096
             assert confirm_input_schema["additionalProperties"] is False
 
             started_result = await client.call_tool(
@@ -109,6 +122,7 @@ def test_exact_mcp_surface_is_registered_and_callable(tmp_path):
             )
             assert started_result.is_error is False
             resolution_id = started_result.structured_content["resolution_id"]
+            assert len(started_result.structured_content["action_digest"]) == 64
 
             status_result = await client.call_tool(
                 "get_resolution_status", {"resolution_id": resolution_id}
@@ -123,13 +137,25 @@ def test_exact_mcp_surface_is_registered_and_callable(tmp_path):
 
             unconfirmed_result = await client.call_tool(
                 "confirm_resolution_action",
-                {"resolution_id": resolution_id, "confirmed": False},
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": False,
+                    "confirmation_attestation": trusted_confirmation(
+                        started_result.structured_content, OWNER_A
+                    ),
+                },
             )
             assert unconfirmed_result.is_error is True
 
             completed_result = await client.call_tool(
                 "confirm_resolution_action",
-                {"resolution_id": resolution_id, "confirmed": True},
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": True,
+                    "confirmation_attestation": trusted_confirmation(
+                        started_result.structured_content, OWNER_A
+                    ),
+                },
             )
             assert completed_result.structured_content["verdict"] == "PASS"
             assert completed_result.structured_content["consumer_state"] == "Verified"
@@ -151,6 +177,9 @@ def test_mcp_rejects_direct_verdict_override_without_executing(tmp_path):
                 {
                     "resolution_id": resolution_id,
                     "confirmed": True,
+                    "confirmation_attestation": trusted_confirmation(
+                        started_result.structured_content, OWNER_A
+                    ),
                     "verdict": "PASS",
                     "success": True,
                     "status": "VERIFIED",
@@ -162,7 +191,13 @@ def test_mcp_rejects_direct_verdict_override_without_executing(tmp_path):
             )
             completed_result = await client.call_tool(
                 "confirm_resolution_action",
-                {"resolution_id": resolution_id, "confirmed": True},
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": True,
+                    "confirmation_attestation": trusted_confirmation(
+                        started_result.structured_content, OWNER_A
+                    ),
+                },
             )
             assert completed_result.structured_content["verdict"] == "FAIL"
 
@@ -241,6 +276,8 @@ def test_mcp_authorization_isolates_principals(tmp_path):
             client, "principal-a", 1, "start_resolution", {"intent": INTENT}
         )
         resolution_id = started_response.json()["result"]["structuredContent"]["resolution_id"]
+        started_data = started_response.json()["result"]["structuredContent"]
+        attestation = trusted_confirmation(started_data, OWNER_A)
 
         unauthorized_text = None
         for request_id, tool_name, arguments in (
@@ -249,7 +286,11 @@ def test_mcp_authorization_isolates_principals(tmp_path):
             (
                 4,
                 "confirm_resolution_action",
-                {"resolution_id": resolution_id, "confirmed": True},
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": True,
+                    "confirmation_attestation": attestation,
+                },
             ),
         ):
             rejected = call_tool(client, "principal-b", request_id, tool_name, arguments)
@@ -280,7 +321,11 @@ def test_mcp_authorization_isolates_principals(tmp_path):
             "principal-a",
             7,
             "confirm_resolution_action",
-            {"resolution_id": resolution_id, "confirmed": True},
+            {
+                "resolution_id": resolution_id,
+                "confirmed": True,
+                "confirmation_attestation": attestation,
+            },
         )
         assert owner_confirm.json()["result"]["structuredContent"]["verdict"] == "PASS"
 

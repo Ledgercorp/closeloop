@@ -84,7 +84,7 @@ is kept at the contract edge:
 ```text
 Alexa+/MCP client -> protected-resource discovery -> bearer-authenticated /mcp
                                                      |
-                         closed input/output schemas + five tools
+                 trusted confirmation attestation -> closed schemas + five tools
                                                      |
                     lifecycle service -> deterministic verifier
                                                      |
@@ -100,6 +100,17 @@ The HTTP adapter exposes both the SDK path-suffixed protected-resource metadata 
 root alias documented by Alexa+. It removes the unsupported challenge only from unauthenticated
 `/mcp` 401 responses. It does not implement an OAuth authorization server or claim to provide
 Alexa+ account linking. Those remain external prerequisites for live onboarding.
+
+Consequential confirmation uses a product-core `ConfirmationAttestationVerifier`. The production
+HMAC-JWS adapter is enabled only when a dedicated secret, trusted issuer, and audience are all
+configured; otherwise it denies every confirmation. The external confirmation authority—not the
+MCP agent—must bind human approval to the bearer-derived owner key and the server-computed,
+versioned canonical action digest. After signature, claim, freshness, and expiry verification, the
+service stores bounded attestation provenance in the existing JSON lifecycle history and
+conditionally writes `EXECUTING` before invoking the provider. SQL and DynamoDB therefore share the
+same single-use, cross-instance replay boundary without a database schema change. Pre-v1 records
+without an explicit confirmation contract fail closed and require an intentional migration; no
+live data migration was performed because CloseLoop has no provisioned production store.
 
 ## Milestone 5 AWS persistence boundary
 

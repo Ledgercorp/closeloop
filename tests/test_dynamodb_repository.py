@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 
 import boto3
 import pytest
@@ -8,11 +9,13 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 from moto import mock_aws
 
 from closeloop.dynamodb_repository import DynamoDbResolutionRepository
+from closeloop.confirmation import CONFIRMATION_CONTRACT_VERSION
 from closeloop.lifecycle import (
     ConcurrentResolutionUpdateError,
     InvalidTransitionError,
     LifecycleState,
     ResolutionNotFoundError,
+    ResolutionRecord,
     ResolutionError,
     ResolutionService,
     ResolutionStorageUnavailableError,
@@ -25,6 +28,7 @@ from closeloop.repository import (
     create_repository_from_environment,
 )
 from closeloop.repository_contract import record_from_mapping, record_to_mapping
+from tests.confirmation_support import trusted_confirmation, verified_test_confirmation
 
 
 OWNER_A = "owner-a"
@@ -77,7 +81,10 @@ def test_lifecycle_and_evidence_survive_repository_reinstantiation(
     second = ResolutionService(repository_for(aws_resource))
     assert second.get_resolution_status(OWNER_A, started["resolution_id"]) == started
     terminal = second.confirm_resolution_action(
-        OWNER_A, started["resolution_id"], confirmed=True
+        OWNER_A,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER_A),
     )
 
     restarted = ResolutionService(repository_for(aws_resource))
@@ -115,18 +122,37 @@ def test_stale_writer_and_terminal_overwrite_fail_atomically(aws_resource):
 
     record_a.confirmed_at = record_a.updated_at
     record_a.state = LifecycleState.EXECUTING
-    record_a.state_history.append(StateTransition(LifecycleState.EXECUTING, record_a.updated_at))
+    record_a.state_history.append(
+        StateTransition(
+            LifecycleState.EXECUTING,
+            record_a.updated_at,
+            confirmation_attestation=verified_test_confirmation(
+                started, OWNER_A, now=record_a.updated_at
+            ),
+        )
+    )
     repository_a.save_owned(record_a, expected_version=record_a.version)
 
     record_b.confirmed_at = record_b.updated_at
     record_b.state = LifecycleState.EXECUTING
-    record_b.state_history.append(StateTransition(LifecycleState.EXECUTING, record_b.updated_at))
+    record_b.state_history.append(
+        StateTransition(
+            LifecycleState.EXECUTING,
+            record_b.updated_at,
+            confirmation_attestation=verified_test_confirmation(
+                started, OWNER_A, now=record_b.updated_at
+            ),
+        )
+    )
     with pytest.raises(ConcurrentResolutionUpdateError, match="another instance"):
         repository_b.save_owned(record_b, expected_version=record_b.version)
 
     terminal_started = service.start_resolution(OWNER_A, "terminal record")
     service.confirm_resolution_action(
-        OWNER_A, terminal_started["resolution_id"], confirmed=True
+        OWNER_A,
+        terminal_started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(terminal_started, OWNER_A),
     )
     terminal = repository_a.get_owned(terminal_started["resolution_id"], OWNER_A)
     version = terminal.version
@@ -191,7 +217,12 @@ def test_requests_use_conditions_consistent_reads_and_paginated_created_order(aw
     service = ResolutionService(repository)
     first = service.start_resolution(OWNER_A, "first")
     terminal = service.start_resolution(OWNER_A, "terminal")
-    service.confirm_resolution_action(OWNER_A, terminal["resolution_id"], confirmed=True)
+    service.confirm_resolution_action(
+        OWNER_A,
+        terminal["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(terminal, OWNER_A),
+    )
     second = service.start_resolution(OWNER_A, "second")
     third = service.start_resolution(OWNER_A, "third")
 
@@ -218,6 +249,7 @@ def test_requests_use_conditions_consistent_reads_and_paginated_created_order(aw
     assert "#state IN" in save_call["ConditionExpression"]
     assert save_call["ExpressionAttributeNames"]["#state"] == "state"
     assert save_call["ExpressionAttributeNames"]["#version"] == "version"
+    assert save_call["ExpressionAttributeNames"]["#history"] == "state_history"
     assert third["resolution_id"] not in [item["resolution_id"] for item in open_records]
 
 
@@ -236,7 +268,12 @@ def test_corrupt_terminal_result_or_evidence_fails_closed(
     repository = repository_for(aws_resource)
     service = ResolutionService(repository)
     started = service.start_resolution(OWNER_A, INTENT)
-    service.confirm_resolution_action(OWNER_A, started["resolution_id"], confirmed=True)
+    service.confirm_resolution_action(
+        OWNER_A,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER_A),
+    )
     table = aws_resource.Table(TABLE_NAME)
     response = table.get_item(
         Key={"owner_id": OWNER_A, "resolution_id": started["resolution_id"]}
@@ -263,7 +300,12 @@ def test_shared_codec_rejects_evidence_that_no_longer_supports_stored_pass(tmp_p
     sql = SqlResolutionRepository(f"sqlite+pysqlite:///{tmp_path / 'corrupt.db'}")
     service = ResolutionService(sql)
     started = service.start_resolution(OWNER_A, INTENT)
-    service.confirm_resolution_action(OWNER_A, started["resolution_id"], confirmed=True)
+    service.confirm_resolution_action(
+        OWNER_A,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER_A),
+    )
     record = sql.get_owned(started["resolution_id"], OWNER_A)
     mapping = record_to_mapping(record, serialize_datetimes=True)
     mapping["independent_evidence"]["auto_renew"] = True
@@ -274,8 +316,26 @@ def test_shared_codec_rejects_evidence_that_no_longer_supports_stored_pass(tmp_p
 
 def test_item_size_guard_fails_before_aws_write(aws_resource):
     repository = repository_for(aws_resource)
+    now = datetime.now(timezone.utc)
+    oversized_record = ResolutionRecord(
+        resolution_id="oversized-record",
+        owner_id=OWNER_A,
+        intent="x" * (351 * 1024),
+        provider_mode="healthy",
+        state=LifecycleState.AWAITING_CONFIRMATION,
+        created_at=now,
+        updated_at=now,
+        state_history=[
+            StateTransition(
+                LifecycleState.REQUESTED,
+                now,
+                confirmation_contract_version=CONFIRMATION_CONTRACT_VERSION,
+            ),
+            StateTransition(LifecycleState.AWAITING_CONFIRMATION, now),
+        ],
+    )
     with pytest.raises(ResolutionStorageUnavailableError, match="item-size"):
-        ResolutionService(repository).start_resolution(OWNER_A, "x" * (351 * 1024))
+        repository.create(oversized_record)
     assert aws_resource.Table(TABLE_NAME).scan()["Count"] == 0
 
 

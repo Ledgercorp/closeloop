@@ -22,7 +22,7 @@ The flagship demo is subscription cancellation. A simulated provider can report 
 
 This repository contains the deterministic resolution core, fault-injection demo provider,
 and an Alexa+-oriented MCP action lifecycle for subscription cancellation. The MCP service requires
-explicit confirmation before execution, records the provider claim separately from an
+a signed, action-bound confirmation attestation before execution, records the provider claim separately from an
 independent read-back, and exposes only read access to the verifier's terminal result.
 
 Milestone 5 adds an optional Amazon DynamoDB repository as the authoritative shared store for
@@ -71,6 +71,14 @@ PostgreSQL database. MCP requests also fail closed unless `CLOSELOOP_AUTH_SECRET
 32 bytes. Configure `CLOSELOOP_AUTH_ISSUER` and `CLOSELOOP_AUTH_AUDIENCE` to match the external
 token issuer. Tokens must use HS256, contain `iss`, `aud`, `sub`, `iat`, and `exp`, and include
 the `closeloop:resolutions` scope. Health routes remain unauthenticated.
+
+Consequential confirmation also fails closed unless `CLOSELOOP_CONFIRMATION_SECRET` is at least
+32 bytes and `CLOSELOOP_CONFIRMATION_ISSUER` plus `CLOSELOOP_CONFIRMATION_AUDIENCE` identify a
+separately trusted confirmation authority. The required compact HS256 attestation is a
+`closeloop.confirmation/v1` contract bound to the bearer-derived subject, exact resolution and
+action digest, affirmative decision, issue/expiry times, and unique ID. The authority must obtain
+the human decision independently; it must never sign fields merely because an MCP agent supplied
+them. Test and browser-validation signers are explicitly local-only and are not production trust.
 
 This JWT configuration is a resource-server boundary, not Alexa+ account linking. A live add-on
 still requires a compatible external OAuth 2.1 authorization server, public HTTPS endpoint, and

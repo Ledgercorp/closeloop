@@ -2,18 +2,212 @@
 
 ## Current phase
 
-Milestone 6 is complete at **LOCAL UI/BROWSER VERIFIED**. CloseLoop now serves a polished,
-read-only MCP Apps proof card for confirmation, lifecycle progress, the canonical `Verified`,
-`Not completed`, and `Awaiting proof` outcomes, concise evidence summaries, and expandable
-execution/read-back/verifier provenance. Browser validation used the exact production resource and
-the official `AppBridge` / `PostMessageTransport` lifecycle with real CloseLoop MCP tool results.
+Milestone 7 is complete at **PARTIALLY ADVERSARIAL VERIFIED**. The prior untrusted
+`{resolution_id, confirmed}`
+boundary now requires a short-lived, signed `closeloop.confirmation/v1` attestation bound to the
+authenticated owner, exact resolution and canonical action digest, affirmative decision, trusted
+issuer/audience, issue/expiry times, and unique attestation ID. Verified provenance is consumed by
+the conditional `AWAITING_CONFIRMATION -> EXECUTING` transition and preserved in SQLite or DynamoDB
+history. Missing production configuration denies all confirmations; no signing secret or test
+issuer is enabled by default.
 
-This is not Alexa+ host, simulator, device, or production verification. The prior live Alexa+
-onboarding blockers remain unchanged. The prior optional DynamoDB integration remains at
-**SIMULATED AWS verification**; no AWS resource was provisioned in this milestone. No provider,
-verifier, lifecycle, authentication, persistence, MCP tool, AWS, or verdict-write capability was
-added or changed. Adversarial testing, demo optimization, submission packaging, and Milestone 7
-were not started.
+The two former strict xfails for cross-resolution and stale confirmation are ordinary passing
+tests in the focused runs so far. This remains local/integration verification plus Moto-simulated
+DynamoDB—not live Alexa+, AWS, provider, production OAuth, or trusted human-confirmation issuance.
+All focused regressions, the post-fix complete-suite checkpoint, and the CRITICAL-risk Governor
+final review passed. Milestone 8, demo optimization, and submission packaging have not started.
+
+## Implemented in Milestone 7
+
+- Replaced the untrusted plain-confirmation boundary with a product-core
+  `ConfirmationAttestationVerifier` abstraction and explicit `closeloop.confirmation/v1` contract.
+  The production adapter requires dedicated issuer, audience, and 32-byte-or-stronger HMAC secret
+  configuration; absent, partial, or weak configuration selects a deny-all verifier.
+- Bound every accepted attestation to the authenticated bearer-token subject, exact resolution,
+  `cancel_subscription` action, server-computed canonical action digest, literal affirmative
+  decision, issue time, expiry, trusted issuer/audience, and bounded unique attestation ID. Tokens
+  are capped at 4,096 bytes and fixed to HS256; malformed, unsigned, modified, stale, future,
+  overlong, or mismatched claims receive one generic rejection.
+- Persisted the verified contract version, issuer, attestation ID, issue/expiry times, action digest,
+  and token SHA-256—not the compact token or signing secret—on the unique `EXECUTING` transition.
+  SQL compares exact prior history application-side and atomically conditions owner, identifier,
+  version, and state; DynamoDB additionally conditions exact prior history. Concurrent or repeated
+  redemption for that bound resolution therefore has at most one winner across repository
+  instances.
+- Kept issuance outside the application core. Automated tests use a deterministic issuer under
+  `tests/`; the proof-card validation builder uses a separately labeled local-only signer. Neither
+  is a production default or evidence of Alexa+ issuance. A production authority must obtain the
+  human decision independently rather than blindly sign agent-controlled fields.
+- Changed the existing `confirm_resolution_action` schema minimally by requiring
+  `confirmation_attestation`; the server still exposes exactly five MCP tools and no verdict-write
+  capability. Status and evidence expose the canonical `action_digest` needed by a trusted host.
+- Converted the two prior strict xfails for wrong-resolution and stale confirmation into passing
+  adversarial tests. Added focused coverage for valid consumption, replay, expiry, future issue
+  time, owner/resolution/action mismatch, tampering, unknown issuer, unsigned agent forgeries,
+  missing/boolean-only confirmation, concurrent consumption, repository re-instantiation,
+  corrupted persisted provenance, deny-all production configuration, and uncertain first writes.
+- Made confirmation an exact JSON boolean, so strings and numbers such as `"true"`, `"yes"`, and
+  `1` cannot cross the confirmation boundary or execute a provider action.
+- Added explicit 2,000-character intent and 64-character resolution-ID limits at MCP and lifecycle
+  boundaries before repository access.
+- Added structural receipt and independent-evidence validation. Negative/string freshness,
+  non-boolean fields, blank/noncanonical/invalid dates, malformed receipts, and adapter exceptions
+  fail closed.
+- Required a valid successful execution receipt as a necessary—but never sufficient—condition for
+  PASS. A failed/malformed receipt followed by apparently positive read-back is INCONCLUSIVE;
+  readable fresh evidence that auto-renew remains enabled is still FAIL.
+- Normalized provider factory, execution, and read-back failures into safe evidence so an
+  infrastructure or adapter failure never becomes VERIFIED.
+- Hardened detailed proof-card results by recomputing the evidence verdict and requiring canonical
+  provenance plus an ordered five-step lifecycle history. Contradictory, forged, reordered,
+  malformed, or unknown results render `Proof unavailable`; hostile text remains escaped text.
+- Exercised actual two-thread confirmation races against SQLite and Moto-backed DynamoDB. Exactly
+  one conditional transition won and the provider executed once.
+- Enforced monotonic lifecycle and provenance timestamps when decoding or persisting a record;
+  reordered history and confirmation/execution/read-back/verifier time corruption fail closed.
+- Added `docs/adversarial-security.md` with the A–K attack matrix, blocking findings/fixes,
+  residual risks, verification scope, and live limitations.
+- Updated package, HTTP app, MCP server, and proof-card versions to `0.7.0`.
+
+## Milestone 7 verification evidence
+
+Authoritative starting state was clean `main` at
+`4c6768c8c3a29fbd8bb82bef8c13cf17508c2c86`, aligned with `origin/main`. The pre-change complete
+suite reproduced the Milestone 6 baseline at `72 passed`; the prior focused `15` UI, `12`
+Alexa+/MCP, and `45` AWS/lifecycle results were reused under Usage Guardian.
+
+The general adversarial file collects 78 reproducible cases and the focused confirmation-attestation
+file collects 31. Before the original Milestone 7 fixes, 14 exploit variants demonstrated unsafe
+execution, incorrect PASS, missing bounds, or an exception. Both former strict expected failures
+are now ordinary passing cases. Current-diff validation commands:
+
+```bash
+uv lock --check
+PYTHONPATH=src uv run --no-editable python -m compileall -q src scripts main.py
+PYTHONPATH=src uv run --no-editable pytest -q tests/test_confirmation_attestation.py
+PYTHONPATH=src uv run --no-editable pytest -q tests/test_adversarial_security.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_aws_infrastructure.py tests/test_dynamodb_repository.py \
+  tests/test_resolution_lifecycle.py tests/test_durable_repository.py \
+  tests/test_cancellation_verifier.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_alexa_integration.py tests/test_mcp_server.py
+PYTHONPATH=src uv run --no-editable pytest -q tests/test_proof_card.py
+PYTHONPATH=src uv run --no-editable pytest -q
+```
+
+Results before the single complete-suite checkpoint:
+
+- dependency lock and compilation: passed (`62` packages resolved);
+- focused confirmation-attestation suite: `31 passed`;
+- focused adversarial/security suite: `78 passed`;
+- focused AWS/lifecycle/verifier regression: `45 passed`;
+- focused Alexa+/MCP regression: `12 passed`, with the pre-existing non-failing
+  Starlette/anyio deprecation warning;
+- focused proof-card/UI regression: `16 passed`;
+- complete suite: `183 passed`, with the same pre-existing warning.
+
+The bounded browser-security host is generated with:
+
+```bash
+validation_dir=$(mktemp -d /tmp/closeloop-m7-browser.XXXXXX)
+PYTHONPATH=src uv run --no-editable python \
+  scripts/build_proof_card_validation.py "$validation_dir"
+cd "$validation_dir"
+python3 -m http.server 8768 --bind 127.0.0.1
+```
+
+It validated one real healthy lifecycle result plus the contradictory read-back, forged provenance,
+reordered history, malformed evidence, unknown state, and injected-text fixtures through the exact
+production MCP App and official `AppBridge` / `PostMessageTransport` path. The healthy result
+rendered `Verified`; all five malformed/forged/unknown results rendered neutral `Proof unavailable`;
+the injected `<img>` and `<b>` strings appeared literally in the accessibility tree rather than as
+markup. The no-result bridge-loading state remained `Waiting for proof`, not Verified. This is
+**LOCAL UI/BROWSER VERIFIED** security behavior, not Alexa+ host verification.
+
+The Development Governor classified the work CRITICAL because it crosses authorization,
+mutation, persistence, and consumer trust boundaries. Its pre-implementation adversarial review
+identified confirmation coercion, malformed evidence, failed-receipt PASS, and proof-card forgery
+as blocking. Its final review rejected unconditional completion because the MCP call cannot prove
+that a trusted user approved the selected resolution or that the confirmation is fresh. It also
+found backend/card date drift and missing provenance chronology checks; both deterministic evidence
+issues were fixed and regression-tested. Usage Guardian reused Milestone 1–6 evidence, used
+fail-first targeted cases, bounded
+the race/protocol/browser matrix, and ran the complete suite at the final checkpoint.
+Its confirmation-attestation pre-implementation review accepted the product-core verifier and
+conditional-consumption design with required refinements: version the contract, deny legacy
+downgrades, persist full verified provenance, state the per-resolution replay scope precisely,
+require complete no-default production configuration, and ensure an external issuer does not
+blindly sign client fields. Those refinements are implemented. The final review found and blocked
+commit on a PostgreSQL incompatibility in the first SQL replay predicate: PostgreSQL `json` has no
+equality operator. The predicate was corrected to use application-side exact-history comparison
+plus atomic owner/identifier/version/state guards, and a PostgreSQL-dialect compile regression was
+added. Re-review found no remaining BLOCKING/HIGH implementation issue. Direct out-of-band database
+mutation without a version update remains outside the repository trust boundary.
+
+## Milestone 7 changed repository files
+
+- `HANDOFF.md`
+- `HACKATHON_REQUIREMENTS.md`
+- `README.md`
+- `docs/adversarial-security.md`
+- `docs/architecture.md`
+- `docs/friction-log.md`
+- `docs/trust-model.md`
+- `pyproject.toml`
+- `scripts/build_proof_card_validation.py`
+- `src/closeloop/alexa_contracts.py`
+- `src/closeloop/confirmation.py`
+- `src/closeloop/dynamodb_repository.py`
+- `src/closeloop/http_app.py`
+- `src/closeloop/lifecycle.py`
+- `src/closeloop/mcp_app.py`
+- `src/closeloop/mcp_server.py`
+- `src/closeloop/repository_contract.py`
+- `src/closeloop/repository.py`
+- `src/closeloop/verifier.py`
+- `tests/__init__.py`
+- `tests/conftest.py`
+- `tests/confirmation_support.py`
+- `tests/test_alexa_integration.py`
+- `tests/test_adversarial_security.py`
+- `tests/test_confirmation_attestation.py`
+- `tests/test_durable_repository.py`
+- `tests/test_dynamodb_repository.py`
+- `tests/test_mcp_server.py`
+- `tests/test_proof_card.py`
+- `tests/test_resolution_lifecycle.py`
+- `uv.lock`
+
+## Milestone 7 residual risks and next milestone
+
+- The CloseLoop resource-server gap is closed locally: untrusted callers cannot create, modify,
+  replay, or retarget a valid configured-authority attestation. Live Alexa+/authorization-server
+  issuance is still unverified. Public Alexa+ documentation covers bearer authentication for
+  user/write tools but does not document a per-action human-confirmation attestation, so CloseLoop
+  does not claim Alexa+ currently emits this contract.
+- Replay protection is single-use for the exact principal/resolution/action-bound resource, not a
+  global JTI registry. Exact binding prevents cross-resource reuse and atomic history preservation
+  prevents replacement on that resolution; a future multi-resource contract would need a global
+  replay namespace.
+- Pre-v1 persisted resolutions fail closed because they lack the explicit contract marker. There is
+  no provisioned production store to migrate; a real upgrade with live data requires an intentional
+  migration or retirement plan.
+- A fully self-consistent malicious MCP host result cannot be distinguished by a read-only card
+  without signed server evidence or a trusted host channel.
+- The app bounds schema fields but relies on deployment-edge controls for raw request-body size.
+- The proof-card module remains pinned to jsDelivr, leaving an external availability/supply-chain
+  dependency.
+- Alexa+ client/OAuth/device behavior, live AWS/IAM/DynamoDB races, a real provider/read-back system,
+  network partitions, PostgreSQL parity, penetration/load tests, and formal assistive-technology
+  testing remain unverified.
+
+Stop here before Milestone 8. Commit and push only after the final current-diff suite and CRITICAL
+Governor review pass without a blocking resource-server finding. Live Alexa+/host issuance remains
+an external integration limitation, not a reason to fabricate verification or broaden this
+milestone into demo polish, submission packaging, providers, or new product features.
+
+## Historical Milestone 6 checkpoint
 
 ## Implemented in Milestone 6
 

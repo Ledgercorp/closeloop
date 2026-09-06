@@ -6,6 +6,7 @@ from closeloop.demo_provider import DemoProvider
 from closeloop.lifecycle import InvalidTransitionError, ResolutionError, ResolutionService
 from closeloop.models import ActionReceipt, CancellationEvidence
 from closeloop.repository import SqlResolutionRepository
+from tests.confirmation_support import trusted_confirmation
 
 
 INTENT = "Cancel my subscription and make sure I will not be charged again."
@@ -65,7 +66,12 @@ def test_confirmed_action_uses_independent_verification(
     service = make_service(tmp_path)
     started = service.start_resolution(OWNER, INTENT, provider_mode)
 
-    completed = service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
+    completed = service.confirm_resolution_action(
+        OWNER,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER),
+    )
     evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
 
     assert completed["lifecycle_state"] == lifecycle_state
@@ -83,7 +89,12 @@ def test_provider_success_claim_cannot_create_verified_result(tmp_path):
     service = make_service(tmp_path)
     started = service.start_resolution(OWNER, INTENT, "false_success")
 
-    completed = service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
+    completed = service.confirm_resolution_action(
+        OWNER,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER),
+    )
     evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
 
     assert evidence["execution_claim"]["provider_reported_success"] is True
@@ -96,7 +107,12 @@ def test_provider_success_claim_cannot_create_verified_result(tmp_path):
 def test_status_and_evidence_reads_do_not_mutate_outcome(tmp_path):
     service = make_service(tmp_path)
     started = service.start_resolution(OWNER, INTENT, "healthy")
-    terminal = service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
+    terminal = service.confirm_resolution_action(
+        OWNER,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER),
+    )
 
     first_status = service.get_resolution_status(OWNER, started["resolution_id"])
     first_evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
@@ -118,10 +134,21 @@ def test_repeated_confirmation_rejects_invalid_terminal_transition(tmp_path):
     provider = CountingProvider()
     service = make_service(tmp_path, lambda _: provider)
     started = service.start_resolution(OWNER, INTENT)
-    service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
+    attestation = trusted_confirmation(started, OWNER)
+    service.confirm_resolution_action(
+        OWNER,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=attestation,
+    )
 
     with pytest.raises(InvalidTransitionError, match="cannot confirm"):
-        service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
+        service.confirm_resolution_action(
+            OWNER,
+            started["resolution_id"],
+            confirmed=True,
+            confirmation_attestation=attestation,
+        )
 
     assert provider.execution_count == 1
 
@@ -130,7 +157,12 @@ def test_list_open_resolutions_only_returns_non_terminal_records(tmp_path):
     service = make_service(tmp_path)
     open_resolution = service.start_resolution(OWNER, "Cancel subscription A")
     completed_resolution = service.start_resolution(OWNER, "Cancel subscription B")
-    service.confirm_resolution_action(OWNER, completed_resolution["resolution_id"], confirmed=True)
+    service.confirm_resolution_action(
+        OWNER,
+        completed_resolution["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(completed_resolution, OWNER),
+    )
 
     listed = service.list_open_resolutions(OWNER)
 
@@ -141,11 +173,17 @@ def test_list_open_resolutions_only_returns_non_terminal_records(tmp_path):
 def test_evidence_has_stable_provenance_timestamps_and_identifiers(tmp_path):
     service = make_service(tmp_path)
     started = service.start_resolution(OWNER, INTENT)
-    service.confirm_resolution_action(OWNER, started["resolution_id"], confirmed=True)
+    service.confirm_resolution_action(
+        OWNER,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER),
+    )
 
     evidence = service.get_resolution_evidence(OWNER, started["resolution_id"])
 
     assert evidence["resolution_id"] == started["resolution_id"]
+    assert evidence["action_digest"] == started["action_digest"]
     assert evidence["execution_claim"]["request_id"]
     assert evidence["execution_claim"]["source"] == "demo_provider.cancel_subscription"
     assert (

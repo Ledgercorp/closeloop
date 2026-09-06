@@ -17,6 +17,7 @@ from closeloop.mcp_app import (
 )
 from closeloop.mcp_server import create_mcp_server
 from closeloop.repository import SqlResolutionRepository
+from tests.confirmation_support import trusted_confirmation
 
 
 _host_html = run_path(
@@ -51,6 +52,9 @@ async def completed_mcp_results(tmp_path, provider_mode):
             {
                 "resolution_id": started.structured_content["resolution_id"],
                 "confirmed": True,
+                "confirmation_attestation": trusted_confirmation(
+                    started.structured_content, OWNER_A
+                ),
             },
         )
         evidence = await client.call_tool(
@@ -176,6 +180,12 @@ def test_presentation_contract_fails_closed_instead_of_trusting_labels_directly(
         'typeof data.is_terminal !== "boolean"',
         'typeof data.confirmation_required !== "boolean"',
         "isTerminal !== true || confirmationRequired !== false",
+        "derivedEvidenceVerdict(data.execution_claim, data.independent_read_back) === verdict",
+        "validTerminalHistory(data.state_history, data.lifecycle_state)",
+        'verifier.verifier !== "closeloop.verify_cancellation/v1"',
+        'execution.source !== "demo_provider.cancel_subscription"',
+        'readBack.source !== "demo_provider.read_cancellation_evidence"',
+        "readBack.freshness_seconds < 0",
         'outcome: "Proof unavailable"',
         'setText("outcome-title", view.outcome)',
     )
@@ -214,7 +224,12 @@ def test_terminal_repository_state_remains_immutable_and_card_remains_read_only(
     repository = SqlResolutionRepository(f"sqlite+pysqlite:///{tmp_path / 'immutable.db'}")
     service = ResolutionService(repository)
     started = service.start_resolution(OWNER_A, INTENT)
-    service.confirm_resolution_action(OWNER_A, started["resolution_id"], confirmed=True)
+    service.confirm_resolution_action(
+        OWNER_A,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER_A),
+    )
     terminal = repository.get_owned(started["resolution_id"], OWNER_A)
     version = terminal.version
     terminal.state = LifecycleState.AWAITING_CONFIRMATION
@@ -251,3 +266,18 @@ def test_validation_host_script_embedding_cannot_be_terminated_by_card_or_payloa
     assert "\\u003c/script>" in host
     assert "globalThis.injected" in host
     assert '<script>globalThis.injected = true</script>' not in host
+
+
+def test_validation_builder_contains_bounded_ui_adversarial_fixtures():
+    source = (
+        Path(__file__).parent.parent / "scripts" / "build_proof_card_validation.py"
+    ).read_text(encoding="utf-8")
+    for fixture in (
+        "contradictory_readback",
+        "forged_provenance",
+        "reordered_history",
+        "malformed_evidence",
+        "injected_text",
+        "unknown_state",
+    ):
+        assert f'results["{fixture}"]' in source

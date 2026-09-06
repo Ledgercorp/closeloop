@@ -4,6 +4,14 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
+from .confirmation import (
+    CONFIRMATION_CONTRACT_VERSION,
+    MAX_ATTESTATION_ID_LENGTH,
+    MAX_ATTESTATION_LIFETIME_SECONDS,
+    MAX_CONFIRMATION_AGE_SECONDS,
+    VerifiedConfirmationAttestation,
+    confirmation_action_digest,
+)
 from .lifecycle import (
     TERMINAL_STATES,
     InvalidTransitionError,
@@ -71,11 +79,33 @@ def validate_target_record(record: ResolutionRecord) -> None:
         raise InvalidTransitionError("state history does not match current state")
     if record.state_history[0].state is not LifecycleState.REQUESTED:
         raise InvalidTransitionError("state history must begin with REQUESTED")
+    if (
+        record.state_history[0].confirmation_contract_version
+        != CONFIRMATION_CONTRACT_VERSION
+    ):
+        raise InvalidTransitionError("resolution confirmation contract is unavailable")
+    if any(
+        item.confirmation_contract_version is not None
+        for item in record.state_history[1:]
+    ):
+        raise InvalidTransitionError("confirmation contract version is misplaced")
     for previous, current in zip(record.state_history, record.state_history[1:]):
         if previous.state not in allowed_previous_states(current.state):
             raise InvalidTransitionError("state history contains an invalid transition")
+        if utc(previous.occurred_at) > utc(current.occurred_at):
+            raise InvalidTransitionError("state history timestamps must be monotonic")
+    created_at = utc(record.created_at)
+    updated_at = utc(record.updated_at)
+    first_transition_at = utc(record.state_history[0].occurred_at)
+    last_transition_at = utc(record.state_history[-1].occurred_at)
+    if not (created_at <= first_transition_at <= last_transition_at <= updated_at):
+        raise InvalidTransitionError("record timestamps do not match state history")
 
     if record.state is LifecycleState.AWAITING_CONFIRMATION:
+        if any(item.confirmation_attestation for item in record.state_history):
+            raise InvalidTransitionError(
+                "unconfirmed resolution cannot contain confirmation attestation"
+            )
         if any(
             value is not None
             for value in (
@@ -94,6 +124,61 @@ def validate_target_record(record: ResolutionRecord) -> None:
         return
     if record.confirmed_at is None:
         raise InvalidTransitionError("execution requires persisted explicit confirmation")
+    transition_times = {
+        transition.state: utc(transition.occurred_at)
+        for transition in record.state_history
+    }
+    confirmed_at = utc(record.confirmed_at)
+    if not (
+        transition_times[LifecycleState.AWAITING_CONFIRMATION]
+        <= confirmed_at
+        <= transition_times[LifecycleState.EXECUTING]
+    ):
+        raise InvalidTransitionError("confirmation timestamp is out of lifecycle order")
+    attestation_transitions = [
+        transition
+        for transition in record.state_history
+        if transition.confirmation_attestation is not None
+    ]
+    if (
+        len(attestation_transitions) != 1
+        or attestation_transitions[0].state is not LifecycleState.EXECUTING
+    ):
+        raise InvalidTransitionError(
+            "execution requires one canonical confirmation attestation"
+        )
+    attestation = attestation_transitions[0].confirmation_attestation
+    assert attestation is not None
+    if (
+        attestation.contract_version != CONFIRMATION_CONTRACT_VERSION
+        or not attestation.issuer.strip()
+        or len(attestation.issuer) > 512
+        or not attestation.attestation_id.strip()
+        or len(attestation.attestation_id) > MAX_ATTESTATION_ID_LENGTH
+        or len(attestation.action_digest) != 64
+        or len(attestation.token_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in attestation.action_digest)
+        or any(character not in "0123456789abcdef" for character in attestation.token_sha256)
+    ):
+        raise InvalidTransitionError("confirmation attestation metadata is invalid")
+    expected_digest = confirmation_action_digest(
+        principal_id=record.owner_id,
+        resolution_id=record.resolution_id,
+        intent=record.intent,
+        provider_mode=record.provider_mode,
+    )
+    if attestation.action_digest != expected_digest:
+        raise InvalidTransitionError("confirmation action digest does not match resolution")
+    issued_at = utc(attestation.issued_at)
+    expires_at = utc(attestation.expires_at)
+    if not (issued_at <= confirmed_at < expires_at):
+        raise InvalidTransitionError("confirmation attestation timing is invalid")
+    if (
+        (expires_at - issued_at).total_seconds()
+        > MAX_ATTESTATION_LIFETIME_SECONDS
+        or (confirmed_at - issued_at).total_seconds() > MAX_CONFIRMATION_AGE_SECONDS
+    ):
+        raise InvalidTransitionError("confirmation attestation freshness is invalid")
     if record.state is LifecycleState.EXECUTING:
         if any(
             value is not None
@@ -110,6 +195,13 @@ def validate_target_record(record: ResolutionRecord) -> None:
         return
     if record.execution_claim is None or record.execution_claim_observed_at is None:
         raise InvalidTransitionError("verification requires persisted execution evidence")
+    execution_observed_at = utc(record.execution_claim_observed_at)
+    if not (
+        transition_times[LifecycleState.EXECUTING]
+        <= execution_observed_at
+        <= transition_times[LifecycleState.VERIFYING]
+    ):
+        raise InvalidTransitionError("execution timestamp is out of lifecycle order")
     if record.state is LifecycleState.VERIFYING:
         if any(
             value is not None
@@ -132,6 +224,15 @@ def validate_target_record(record: ResolutionRecord) -> None:
             or record.verified_at is None
         ):
             raise InvalidTransitionError("terminal state requires complete verifier evidence")
+        evidence_observed_at = utc(record.independent_evidence_observed_at)
+        verified_at = utc(record.verified_at)
+        if not (
+            transition_times[LifecycleState.VERIFYING]
+            <= evidence_observed_at
+            <= verified_at
+            <= last_transition_at
+        ):
+            raise InvalidTransitionError("verification timestamps are out of lifecycle order")
         expected_state, expected_consumer_state = _VERDICT_STATES[record.verification.verdict]
         if record.state is not expected_state:
             raise InvalidTransitionError("terminal state does not match verifier evidence")
@@ -201,10 +302,7 @@ def record_to_mapping(
             else None
         ),
         "verified_at": time_value(record.verified_at),
-        "state_history": [
-            {"state": item.state.value, "occurred_at": iso(item.occurred_at)}
-            for item in record.state_history
-        ],
+        "state_history": [_transition_to_mapping(item) for item in record.state_history],
         "version": record.version,
     }
 
@@ -258,10 +356,34 @@ def record_from_mapping(mapping: Mapping[str, Any]) -> ResolutionRecord:
         history = []
         for item in history_data:
             item_mapping = _required_mapping(item, "state_history item")
+            attestation_data = _optional_mapping(
+                item_mapping.get("confirmation_attestation"),
+                "confirmation_attestation",
+            )
+            attestation = None
+            if attestation_data is not None:
+                attestation = VerifiedConfirmationAttestation(
+                    contract_version=_required_str(
+                        attestation_data, "contract_version"
+                    ),
+                    issuer=_required_str(attestation_data, "issuer"),
+                    attestation_id=_required_str(attestation_data, "attestation_id"),
+                    issued_at=_required_time(attestation_data.get("issued_at"), "issued_at"),
+                    expires_at=_required_time(
+                        attestation_data.get("expires_at"), "expires_at"
+                    ),
+                    action_digest=_required_str(attestation_data, "action_digest"),
+                    token_sha256=_required_str(attestation_data, "token_sha256"),
+                )
             history.append(
                 StateTransition(
                     LifecycleState(_required_str(item_mapping, "state")),
                     _required_time(item_mapping.get("occurred_at"), "occurred_at"),
+                    confirmation_contract_version=_optional_str(
+                        item_mapping.get("confirmation_contract_version"),
+                        "confirmation_contract_version",
+                    ),
+                    confirmation_attestation=attestation,
                 )
             )
 
@@ -300,6 +422,35 @@ def record_from_mapping(mapping: Mapping[str, Any]) -> ResolutionRecord:
         raise ResolutionStorageUnavailableError(
             "stored resolution record is invalid"
         ) from exc
+
+
+def _transition_to_mapping(item: StateTransition) -> dict[str, object]:
+    result: dict[str, object] = {
+        "state": item.state.value,
+        "occurred_at": iso(item.occurred_at),
+    }
+    if item.confirmation_contract_version is not None:
+        result["confirmation_contract_version"] = item.confirmation_contract_version
+    if item.confirmation_attestation is not None:
+        attestation = item.confirmation_attestation
+        result["confirmation_attestation"] = {
+            "contract_version": attestation.contract_version,
+            "issuer": attestation.issuer,
+            "attestation_id": attestation.attestation_id,
+            "issued_at": iso(attestation.issued_at),
+            "expires_at": iso(attestation.expires_at),
+            "action_digest": attestation.action_digest,
+            "token_sha256": attestation.token_sha256,
+        }
+    return result
+
+
+def expected_previous_history(record: ResolutionRecord) -> list[dict[str, object]]:
+    """Return the exact persisted history required before this transition."""
+
+    if len(record.state_history) < 2:
+        raise InvalidTransitionError("resolution has no predecessor history")
+    return [_transition_to_mapping(item) for item in record.state_history[:-1]]
 
 
 def _required_mapping(value: object, field: str) -> Mapping[str, Any]:

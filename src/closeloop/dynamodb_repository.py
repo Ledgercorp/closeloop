@@ -20,6 +20,7 @@ from .lifecycle import (
     allowed_previous_states,
 )
 from .repository_contract import (
+    expected_previous_history,
     record_from_mapping,
     record_to_mapping,
     validate_new_record,
@@ -113,6 +114,7 @@ class DynamoDbResolutionRepository:
         item["version"] = next_version
         self._validate_item_size(item)
         values: dict[str, object] = {":expected_version": expected_version}
+        values[":expected_history"] = expected_previous_history(record)
         state_tokens = []
         for index, state in enumerate(predecessors):
             token = f":previous_state_{index}"
@@ -121,6 +123,7 @@ class DynamoDbResolutionRepository:
         condition = (
             "attribute_exists(#owner) AND attribute_exists(#resolution) "
             "AND #version = :expected_version "
+            "AND #history = :expected_history "
             f"AND #state IN ({', '.join(state_tokens)})"
         )
         try:
@@ -132,6 +135,7 @@ class DynamoDbResolutionRepository:
                     "#resolution": "resolution_id",
                     "#state": "state",
                     "#version": "version",
+                    "#history": "state_history",
                 },
                 ExpressionAttributeValues=values,
             )

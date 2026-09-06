@@ -32,6 +32,10 @@ class ResolutionStatusOutput(AlexaContract):
     task: str = Field(description="The customer's complete requested task.")
     intent: str = Field(description="Backward-compatible alias of the customer's requested task.")
     action: Literal["cancel_subscription"]
+    action_digest: str = Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description="Server-computed digest of the exact consequential action requiring approval.",
+    )
     execution_environment: Literal["demo_simulation"]
     provider_mode: ProviderMode
     lifecycle_state: LifecycleStateValue
@@ -89,6 +93,7 @@ class ResolutionEvidenceOutput(AlexaContract):
     resolution_id: str
     task: str = Field(description="The customer's complete requested task.")
     action: Literal["cancel_subscription"]
+    action_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     execution_environment: Literal["demo_simulation"]
     provider_mode: ProviderMode
     lifecycle_state: LifecycleStateValue

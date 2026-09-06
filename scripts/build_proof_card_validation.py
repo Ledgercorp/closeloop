@@ -10,10 +10,18 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
 
+import jwt
 from mcp import Client
 
+from closeloop.confirmation import (
+    CONFIRMATION_CONTRACT_VERSION,
+    HmacJwtConfirmationAttestationVerifier,
+)
 from closeloop.lifecycle import ResolutionService
 from closeloop.mcp_app import PROOF_CARD_HTML
 from closeloop.mcp_server import create_mcp_server
@@ -22,6 +30,32 @@ from closeloop.repository import SqlResolutionRepository
 
 OWNER = "proof-card-browser-validation"
 INTENT = "Cancel my subscription and make sure I will not be charged again."
+VALIDATION_CONFIRMATION_SECRET = "local-validation-only-confirmation-secret-32-bytes"
+VALIDATION_CONFIRMATION_ISSUER = "https://confirmation.validation.local"
+VALIDATION_CONFIRMATION_AUDIENCE = "https://closeloop.validation/confirmation"
+
+
+def _validation_attestation(status: dict[str, object]) -> str:
+    """Mint only a clearly labeled local browser-validation attestation."""
+
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {
+            "iss": VALIDATION_CONFIRMATION_ISSUER,
+            "aud": VALIDATION_CONFIRMATION_AUDIENCE,
+            "confirmation_contract": CONFIRMATION_CONTRACT_VERSION,
+            "sub": OWNER,
+            "resolution_id": status["resolution_id"],
+            "action": status["action"],
+            "action_digest": status["action_digest"],
+            "confirmed": True,
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(seconds=60)).timestamp()),
+            "jti": str(uuid4()),
+        },
+        VALIDATION_CONFIRMATION_SECRET,
+        algorithm="HS256",
+    )
 
 
 def _script_json(value: object) -> str:
@@ -88,8 +122,14 @@ def _host_html(name: str, structured_content: dict[str, object]) -> str:
 
 async def _real_results(database_path: Path) -> dict[str, dict[str, object]]:
     repository = SqlResolutionRepository(f"sqlite+pysqlite:///{database_path}")
+    confirmation_verifier = HmacJwtConfirmationAttestationVerifier(
+        secret=VALIDATION_CONFIRMATION_SECRET,
+        issuer=VALIDATION_CONFIRMATION_ISSUER,
+        audience=VALIDATION_CONFIRMATION_AUDIENCE,
+    )
     server = create_mcp_server(
-        ResolutionService(repository), principal_resolver=lambda: OWNER
+        ResolutionService(repository, confirmation_verifier=confirmation_verifier),
+        principal_resolver=lambda: OWNER,
     )
     results: dict[str, dict[str, object]] = {}
     async with Client(server) as client:
@@ -105,7 +145,13 @@ async def _real_results(database_path: Path) -> dict[str, dict[str, object]]:
             resolution_id = started.structured_content["resolution_id"]
             await client.call_tool(
                 "confirm_resolution_action",
-                {"resolution_id": resolution_id, "confirmed": True},
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": True,
+                    "confirmation_attestation": _validation_attestation(
+                        started.structured_content
+                    ),
+                },
             )
             evidence = await client.call_tool(
                 "get_resolution_evidence", {"resolution_id": resolution_id}
@@ -116,6 +162,30 @@ async def _real_results(database_path: Path) -> dict[str, dict[str, object]]:
         contradictory["consumer_state"] = "Not completed"
         results["contradictory"] = contradictory
 
+        contradictory_readback = deepcopy(results["healthy"])
+        contradictory_readback["independent_read_back"]["auto_renew"] = True
+        results["contradictory_readback"] = contradictory_readback
+
+        forged_provenance = deepcopy(results["healthy"])
+        forged_provenance["verification"]["verifier"] = "attacker.force_pass"
+        results["forged_provenance"] = forged_provenance
+
+        reordered_history = deepcopy(results["healthy"])
+        reordered_history["state_history"][2:4] = reversed(
+            reordered_history["state_history"][2:4]
+        )
+        results["reordered_history"] = reordered_history
+
+        malformed_evidence = deepcopy(results["healthy"])
+        malformed_evidence["independent_read_back"]["freshness_seconds"] = "0"
+        results["malformed_evidence"] = malformed_evidence
+
+        injected_text = deepcopy(results["healthy"])
+        injected_text["task"] = '<img src=x onerror="document.body.dataset.pwned=true">'
+        injected_text["execution_claim"]["message"] = "</script><script>alert(1)</script>"
+        injected_text["verification"]["reason"] = "<b>literal evidence text</b>"
+        results["injected_text"] = injected_text
+
         missing_status_booleans = dict(confirmation.structured_content)
         missing_status_booleans.pop("is_terminal")
         missing_status_booleans.pop("confirmation_required")
@@ -125,6 +195,17 @@ async def _real_results(database_path: Path) -> dict[str, dict[str, object]]:
         wrong_status_booleans["is_terminal"] = "false"
         wrong_status_booleans["confirmation_required"] = "true"
         results["wrong_status_booleans"] = wrong_status_booleans
+
+        results["unknown_state"] = {
+            "task": "Unknown result",
+            "lifecycle_state": "FORCED_VERIFIED",
+            "is_terminal": True,
+            "confirmation_required": False,
+            "execution_status": "completed",
+            "verification_status": "PASS",
+            "consumer_state": "Verified",
+            "verdict": "PASS",
+        }
     return results
 
 

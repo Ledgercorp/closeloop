@@ -9,7 +9,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.mcpserver.tools import Tool
 from mcp.types import ToolAnnotations
-from pydantic import Field
+from pydantic import Field, StrictBool
 
 from .alexa_contracts import (
     OpenResolutionsOutput,
@@ -18,9 +18,12 @@ from .alexa_contracts import (
     ResolutionStatusOutput,
 )
 from .auth import PrincipalResolver, principal_from_authenticated_request
+from .confirmation import MAX_ATTESTATION_LENGTH
 from .lifecycle import (
     ConcurrentResolutionUpdateError,
     InvalidTransitionError,
+    MAX_INTENT_LENGTH,
+    MAX_RESOLUTION_ID_LENGTH,
     ResolutionError,
     ResolutionNotFoundError,
     ResolutionService,
@@ -34,6 +37,7 @@ ResolutionId = Annotated[
     str,
     Field(
         min_length=1,
+        max_length=MAX_RESOLUTION_ID_LENGTH,
         description="The owner-scoped resolution_id returned by start_resolution.",
     ),
 ]
@@ -96,6 +100,7 @@ def create_mcp_server(
             str,
             Field(
                 min_length=1,
+                max_length=MAX_INTENT_LENGTH,
                 description=(
                     "The customer's complete subscription-cancellation request, including the "
                     "outcome they want independently verified."
@@ -131,12 +136,23 @@ def create_mcp_server(
     def confirm_resolution_action(
         resolution_id: ResolutionId,
         confirmed: Annotated[
-            bool,
+            StrictBool,
             Field(
                 description=(
                     "Must be true only after the customer explicitly confirms the consequential "
                     "cancellation in the current conversation."
                 )
+            ),
+        ],
+        confirmation_attestation: Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=MAX_ATTESTATION_LENGTH,
+                description=(
+                    "A short-lived, single-use attestation minted by the configured trusted "
+                    "confirmation authority after the customer approves this exact action."
+                ),
             ),
         ],
     ) -> ResolutionStatusOutput:
@@ -149,7 +165,10 @@ def create_mcp_server(
 
         result = _resolution_operation(
             lambda: resolution_service.confirm_resolution_action(
-                principal_resolver(), resolution_id, confirmed
+                principal_resolver(),
+                resolution_id,
+                confirmed,
+                confirmation_attestation,
             )
         )
         return ResolutionStatusOutput.model_validate(result)
@@ -272,7 +291,7 @@ def create_mcp_server(
             "Start a resolution, obtain explicit user confirmation, then confirm the action. "
             "Execution claims are not verdicts; use status and evidence to report the outcome."
         ),
-        version="0.6.0",
+        version="0.7.0",
         tools=tools,
         extensions=[proof_card],
         auth=auth_settings,

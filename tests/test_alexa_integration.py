@@ -7,6 +7,7 @@ from closeloop.mcp_app import PROOF_CARD_HTML, PROOF_CARD_URI
 from closeloop.mcp_server import create_mcp_server
 from closeloop.lifecycle import ResolutionService
 from closeloop.repository import SqlResolutionRepository
+from tests.confirmation_support import trusted_confirmation
 
 
 EXPECTED_TOOLS = {
@@ -74,6 +75,7 @@ def test_alexa_tool_discovery_contracts_are_closed_and_conversation_ready(tmp_pa
             )
             assert {
                 "task",
+                "action_digest",
                 "execution_status",
                 "verification_status",
                 "consumer_state",
@@ -106,6 +108,9 @@ def test_alexa_responses_preserve_all_verdicts_with_structured_and_text_fallback
                     {
                         "resolution_id": started_data["resolution_id"],
                         "confirmed": True,
+                        "confirmation_attestation": trusted_confirmation(
+                            started_data, "owner"
+                        ),
                     },
                 )
                 data = completed.structured_content
@@ -142,21 +147,34 @@ def test_alexa_tool_errors_are_rejected_with_useful_nonempty_fallbacks(tmp_path)
 
             started = await client.call_tool("start_resolution", {"intent": INTENT})
             resolution_id = started.structured_content["resolution_id"]
+            attestation = trusted_confirmation(started.structured_content, "owner")
             unconfirmed = await client.call_tool(
                 "confirm_resolution_action",
-                {"resolution_id": resolution_id, "confirmed": False},
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": False,
+                    "confirmation_attestation": attestation,
+                },
             )
             assert unconfirmed.is_error is True
             assert "explicit confirmation is required" in result_text(unconfirmed)
 
             completed = await client.call_tool(
                 "confirm_resolution_action",
-                {"resolution_id": resolution_id, "confirmed": True},
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": True,
+                    "confirmation_attestation": attestation,
+                },
             )
             assert completed.is_error is False
             repeated = await client.call_tool(
                 "confirm_resolution_action",
-                {"resolution_id": resolution_id, "confirmed": True},
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": True,
+                    "confirmation_attestation": attestation,
+                },
             )
             assert repeated.is_error is True
             assert "cannot be advanced from its current lifecycle state" in result_text(repeated)

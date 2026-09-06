@@ -6,9 +6,27 @@ from enum import Enum
 from typing import Callable, Protocol
 from uuid import uuid4
 
+from .confirmation import (
+    CONFIRMATION_ACTION,
+    CONFIRMATION_CONTRACT_VERSION,
+    ConfirmationAttestationError,
+    ConfirmationAttestationVerifier,
+    ExpectedConfirmation,
+    VerifiedConfirmationAttestation,
+    confirmation_action_digest,
+    confirmation_attestation_verifier_from_environment,
+)
 from .demo_provider import DemoProvider
 from .models import ActionReceipt, CancellationEvidence, ResolutionVerdict, VerificationResult
-from .verifier import verify_cancellation
+from .verifier import (
+    is_valid_action_receipt,
+    is_valid_cancellation_evidence,
+    verify_cancellation,
+)
+
+
+MAX_INTENT_LENGTH = 2000
+MAX_RESOLUTION_ID_LENGTH = 64
 
 
 class LifecycleState(str, Enum):
@@ -92,6 +110,8 @@ def _isoformat(value: datetime | None) -> str | None:
 class StateTransition:
     state: LifecycleState
     occurred_at: datetime
+    confirmation_contract_version: str | None = None
+    confirmation_attestation: VerifiedConfirmationAttestation | None = None
 
 
 @dataclass
@@ -135,6 +155,7 @@ class ResolutionService:
         self,
         repository: ResolutionRepository | None = None,
         provider_factory: ProviderFactory = DemoProvider,
+        confirmation_verifier: ConfirmationAttestationVerifier | None = None,
     ) -> None:
         if repository is None:
             from .repository import create_repository_from_environment
@@ -142,6 +163,9 @@ class ResolutionService:
             repository = create_repository_from_environment()
         self._repository = repository
         self._provider_factory = provider_factory
+        self._confirmation_verifier = (
+            confirmation_verifier or confirmation_attestation_verifier_from_environment()
+        )
 
     def start_resolution(
         self,
@@ -153,6 +177,10 @@ class ResolutionService:
         normalized_intent = intent.strip()
         if not normalized_intent:
             raise ResolutionError("intent must not be empty")
+        if len(normalized_intent) > MAX_INTENT_LENGTH:
+            raise ResolutionError(
+                f"intent must not exceed {MAX_INTENT_LENGTH} characters"
+            )
 
         now = _utc_now()
         record = ResolutionRecord(
@@ -162,7 +190,13 @@ class ResolutionService:
             provider_mode=provider_mode,
             created_at=now,
             updated_at=now,
-            state_history=[StateTransition(LifecycleState.REQUESTED, now)],
+            state_history=[
+                StateTransition(
+                    LifecycleState.REQUESTED,
+                    now,
+                    confirmation_contract_version=CONFIRMATION_CONTRACT_VERSION,
+                )
+            ],
         )
         self._transition(record, LifecycleState.AWAITING_CONFIRMATION)
         self._repository.create(record)
@@ -173,21 +207,45 @@ class ResolutionService:
         owner_id: str,
         resolution_id: str,
         confirmed: bool,
+        confirmation_attestation: str | None = None,
     ) -> dict[str, object]:
         self._validate_owner(owner_id)
         if confirmed is not True:
             raise ResolutionError("explicit confirmation is required before execution")
+        self._validate_resolution_id(resolution_id)
 
         record = self._repository.get_owned(resolution_id, owner_id)
         if record.state is not LifecycleState.AWAITING_CONFIRMATION:
             raise InvalidTransitionError(
                 f"cannot confirm resolution while state is {record.state.value}"
             )
-        record.confirmed_at = _utc_now()
-        self._transition(record, LifecycleState.EXECUTING)
+        now = _utc_now()
+        digest = self._action_digest(record)
+        try:
+            verified_confirmation = self._confirmation_verifier.verify(
+                confirmation_attestation or "",
+                ExpectedConfirmation(
+                    principal_id=record.owner_id,
+                    resolution_id=record.resolution_id,
+                    action=CONFIRMATION_ACTION,
+                    action_digest=digest,
+                ),
+                now=now,
+            )
+        except ConfirmationAttestationError as exc:
+            raise ResolutionError("trusted confirmation attestation is required") from exc
+        record.confirmed_at = now
+        self._transition(
+            record,
+            LifecycleState.EXECUTING,
+            confirmation_attestation=verified_confirmation,
+        )
         self._repository.save_owned(record, expected_version=record.version)
 
-        provider = self._provider_factory(record.provider_mode)
+        try:
+            provider = self._provider_factory(record.provider_mode)
+        except Exception:
+            provider = None
         receipt = self._execute(provider)
         record.execution_claim = receipt
         record.execution_claim_observed_at = _utc_now()
@@ -206,10 +264,12 @@ class ResolutionService:
 
     def get_resolution_status(self, owner_id: str, resolution_id: str) -> dict[str, object]:
         self._validate_owner(owner_id)
+        self._validate_resolution_id(resolution_id)
         return self._status_view(self._repository.get_owned(resolution_id, owner_id))
 
     def get_resolution_evidence(self, owner_id: str, resolution_id: str) -> dict[str, object]:
         self._validate_owner(owner_id)
+        self._validate_resolution_id(resolution_id)
         return self._evidence_view(self._repository.get_owned(resolution_id, owner_id))
 
     def list_open_resolutions(self, owner_id: str, limit: int = 50) -> list[dict[str, object]]:
@@ -227,20 +287,37 @@ class ResolutionService:
             raise ResolutionError("an authenticated principal is required")
 
     @staticmethod
-    def _execute(provider: CancellationProvider) -> ActionReceipt:
+    def _validate_resolution_id(resolution_id: str) -> None:
+        if not isinstance(resolution_id, str) or not resolution_id.strip():
+            raise ResolutionError("resolution_id must be a non-empty string")
+        if len(resolution_id) > MAX_RESOLUTION_ID_LENGTH:
+            raise ResolutionError(
+                f"resolution_id must not exceed {MAX_RESOLUTION_ID_LENGTH} characters"
+            )
+
+    @staticmethod
+    def _execute(provider: CancellationProvider | None) -> ActionReceipt:
         try:
-            return provider.cancel_subscription()
+            receipt = provider.cancel_subscription() if provider else None
+            if not is_valid_action_receipt(receipt):
+                raise TypeError("provider returned an invalid action receipt")
+            return receipt
         except Exception:
             return ActionReceipt(
                 request_id=str(uuid4()),
                 provider_reported_success=False,
-                message="Execution provider did not return a receipt.",
+                message="Execution provider did not return a valid receipt.",
             )
 
     @staticmethod
-    def _collect_independent_evidence(provider: CancellationProvider) -> CancellationEvidence:
+    def _collect_independent_evidence(
+        provider: CancellationProvider | None,
+    ) -> CancellationEvidence:
         try:
-            return provider.read_cancellation_evidence()
+            evidence = provider.read_cancellation_evidence() if provider else None
+            if not is_valid_cancellation_evidence(evidence):
+                raise TypeError("provider returned invalid independent evidence")
+            return evidence
         except Exception:
             return CancellationEvidence(
                 account_readable=False,
@@ -258,7 +335,12 @@ class ResolutionService:
         }[result.verdict]
 
     @staticmethod
-    def _transition(record: ResolutionRecord, next_state: LifecycleState) -> None:
+    def _transition(
+        record: ResolutionRecord,
+        next_state: LifecycleState,
+        *,
+        confirmation_attestation: VerifiedConfirmationAttestation | None = None,
+    ) -> None:
         if record.state not in allowed_previous_states(next_state):
             raise InvalidTransitionError(
                 f"transition {record.state.value} -> {next_state.value} is not allowed"
@@ -266,7 +348,22 @@ class ResolutionService:
         now = _utc_now()
         record.state = next_state
         record.updated_at = now
-        record.state_history.append(StateTransition(next_state, now))
+        record.state_history.append(
+            StateTransition(
+                next_state,
+                now,
+                confirmation_attestation=confirmation_attestation,
+            )
+        )
+
+    @staticmethod
+    def _action_digest(record: ResolutionRecord) -> str:
+        return confirmation_action_digest(
+            principal_id=record.owner_id,
+            resolution_id=record.resolution_id,
+            intent=record.intent,
+            provider_mode=record.provider_mode,
+        )
 
     @staticmethod
     def _status_view(record: ResolutionRecord) -> dict[str, object]:
@@ -289,6 +386,7 @@ class ResolutionService:
             "resolution_id": record.resolution_id,
             "task": record.intent,
             "action": "cancel_subscription",
+            "action_digest": ResolutionService._action_digest(record),
             "intent": record.intent,
             "execution_environment": "demo_simulation",
             "provider_mode": record.provider_mode,
@@ -314,6 +412,7 @@ class ResolutionService:
             "resolution_id": record.resolution_id,
             "task": record.intent,
             "action": "cancel_subscription",
+            "action_digest": ResolutionService._action_digest(record),
             "execution_environment": "demo_simulation",
             "provider_mode": record.provider_mode,
             "lifecycle_state": record.state.value,

@@ -37,6 +37,7 @@ from .lifecycle import (
     allowed_previous_states,
 )
 from .repository_contract import (
+    expected_previous_history,
     record_from_mapping,
     record_to_mapping,
     validate_new_record,
@@ -128,15 +129,18 @@ class SqlResolutionRepository:
             raise ConcurrentResolutionUpdateError(
                 f"resolution version does not match expected version: {record.resolution_id}"
             )
-        terminal_values = [state.value for state in TERMINAL_STATES]
-        predecessor_values = [state.value for state in allowed_previous_states(record.state)]
+        expected_history = expected_previous_history(record)
         next_version = expected_version + 1
         values = record_to_mapping(record)
         values["version"] = next_version
         try:
             with self._engine.begin() as connection:
                 current = connection.execute(
-                    select(_resolutions.c.state, _resolutions.c.version).where(
+                    select(
+                        _resolutions.c.state,
+                        _resolutions.c.version,
+                        _resolutions.c.state_history,
+                    ).where(
                         _resolutions.c.resolution_id == record.resolution_id,
                         _resolutions.c.owner_id == record.owner_id,
                     )
@@ -157,17 +161,18 @@ class SqlResolutionRepository:
                     raise InvalidTransitionError(
                         f"transition {current['state']} -> {record.state.value} is not allowed"
                     )
+                if current["state_history"] != expected_history:
+                    raise ConcurrentResolutionUpdateError(
+                        f"resolution history changed: {record.resolution_id}"
+                    )
                 validate_target_record(record)
                 result = connection.execute(
-                    update(_resolutions)
-                    .where(
-                        _resolutions.c.resolution_id == record.resolution_id,
-                        _resolutions.c.owner_id == record.owner_id,
-                        _resolutions.c.version == expected_version,
-                        _resolutions.c.state.not_in(terminal_values),
-                        _resolutions.c.state.in_(predecessor_values),
-                    )
-                    .values(**values)
+                    _owned_transition_update(
+                        resolution_id=record.resolution_id,
+                        owner_id=record.owner_id,
+                        expected_version=expected_version,
+                        next_state=record.state,
+                    ).values(**values)
                 )
                 if result.rowcount == 1:
                     record.version = next_version
@@ -210,6 +215,31 @@ class SqlResolutionRepository:
                     "durable resolution storage is unavailable"
                 ) from exc
             self._schema_ready = True
+
+
+def _owned_transition_update(
+    *,
+    resolution_id: str,
+    owner_id: str,
+    expected_version: int,
+    next_state: LifecycleState,
+):
+    """Build the cross-dialect atomic transition predicate.
+
+    Exact prior history is compared after the owner-scoped read. Version and state provide the
+    atomic write guard; the JSON column is deliberately absent because PostgreSQL `json` has no
+    equality operator.
+    """
+
+    return update(_resolutions).where(
+        _resolutions.c.resolution_id == resolution_id,
+        _resolutions.c.owner_id == owner_id,
+        _resolutions.c.version == expected_version,
+        _resolutions.c.state.not_in([state.value for state in TERMINAL_STATES]),
+        _resolutions.c.state.in_(
+            [state.value for state in allowed_previous_states(next_state)]
+        ),
+    )
 
 
 class UnavailableResolutionRepository:

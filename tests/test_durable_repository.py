@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from closeloop.lifecycle import (
     ConcurrentResolutionUpdateError,
@@ -10,7 +11,12 @@ from closeloop.lifecycle import (
     StateTransition,
     TerminalOutcomeImmutableError,
 )
-from closeloop.repository import SqlResolutionRepository, create_repository_from_environment
+from closeloop.repository import (
+    SqlResolutionRepository,
+    _owned_transition_update,
+    create_repository_from_environment,
+)
+from tests.confirmation_support import trusted_confirmation, verified_test_confirmation
 
 
 OWNER_A = "owner-a"
@@ -20,6 +26,21 @@ INTENT = "Cancel my subscription and make sure I will not be charged again."
 
 def repository_for(database_path):
     return SqlResolutionRepository(f"sqlite+pysqlite:///{database_path}")
+
+
+def test_transition_predicate_compiles_for_postgresql_json_storage():
+    statement = _owned_transition_update(
+        resolution_id="resolution-1",
+        owner_id=OWNER_A,
+        expected_version=1,
+        next_state=LifecycleState.EXECUTING,
+    )
+
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "state_history =" not in compiled
+    assert "version =" in compiled
+    assert "state IN" in compiled
 
 
 def test_resolution_survives_repository_and_service_reinstantiation(tmp_path):
@@ -32,7 +53,10 @@ def test_resolution_survives_repository_and_service_reinstantiation(tmp_path):
     assert restarted_status == started
 
     terminal = second_instance.confirm_resolution_action(
-        OWNER_A, started["resolution_id"], confirmed=True
+        OWNER_A,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER_A),
     )
     third_instance = ResolutionService(repository_for(database_path))
     persisted_status = third_instance.get_resolution_status(OWNER_A, started["resolution_id"])
@@ -67,7 +91,12 @@ def test_non_pass_outcomes_and_evidence_survive_restart(
     database_path = tmp_path / "resolutions.db"
     service = ResolutionService(repository_for(database_path))
     started = service.start_resolution(OWNER_A, INTENT, provider_mode)
-    service.confirm_resolution_action(OWNER_A, started["resolution_id"], confirmed=True)
+    service.confirm_resolution_action(
+        OWNER_A,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER_A),
+    )
 
     restarted = ResolutionService(repository_for(database_path))
     status = restarted.get_resolution_status(OWNER_A, started["resolution_id"])
@@ -100,7 +129,12 @@ def test_terminal_outcome_is_immutable_at_repository_boundary(tmp_path):
     repository = repository_for(tmp_path / "resolutions.db")
     service = ResolutionService(repository)
     started = service.start_resolution(OWNER_A, INTENT)
-    service.confirm_resolution_action(OWNER_A, started["resolution_id"], confirmed=True)
+    service.confirm_resolution_action(
+        OWNER_A,
+        started["resolution_id"],
+        confirmed=True,
+        confirmation_attestation=trusted_confirmation(started, OWNER_A),
+    )
 
     terminal_record = repository.get_owned(started["resolution_id"], OWNER_A)
     original_version = terminal_record.version
@@ -124,7 +158,15 @@ def test_optimistic_version_rejects_stale_cross_instance_update(tmp_path):
     record_b = repository_b.get_owned(started["resolution_id"], OWNER_A)
     record_a.confirmed_at = record_a.updated_at
     record_a.state = LifecycleState.EXECUTING
-    record_a.state_history.append(StateTransition(LifecycleState.EXECUTING, record_a.updated_at))
+    record_a.state_history.append(
+        StateTransition(
+            LifecycleState.EXECUTING,
+            record_a.updated_at,
+            confirmation_attestation=verified_test_confirmation(
+                started, OWNER_A, now=record_a.updated_at
+            ),
+        )
+    )
     repository_a.save_owned(record_a, expected_version=record_a.version)
 
     record_b.state = LifecycleState.EXECUTING
