@@ -2,10 +2,12 @@
 
 ## Current phase
 
-Milestone 8 final submission packaging is implemented and the one final complete suite passes. The
-Development Governor found no BLOCKING/HIGH issue after its claim review; commit, push, and the
-signed-out repository/license check remain. The public README, deterministic recording index, sub-three-
-minute storyboard, submission copy, judging map, verification matrix, product feedback, screenshot
+Milestone 8 is complete at the repository/package boundary. The final complete suite passes, and
+the Development Governor found no BLOCKING/HIGH issue after its claim review. The package commit
+was pushed and anonymously verified: the repository and README return HTTP 200, GitHub reports the
+repository public and detects `Apache-2.0`, and the public license checksum matches canonical Apache
+text. The public README, deterministic recording index, sub-three-minute storyboard, submission
+copy, judging map, verification matrix, product feedback, screenshot
 plan, and manual checklist now tell one evidence-backed story without changing the CloseLoop trust
 model or adding providers/cloud dependencies.
 
@@ -15,10 +17,11 @@ proves `PASS -> Verified`, `FAIL -> Not completed`, and `INCONCLUSIVE -> Awaitin
 real local MCP/lifecycle/repository/provider/read-back/verifier path. The provider and recording
 signer remain clearly labeled simulations.
 
-The public repository exists, but public application deployment remains **NOT VERIFIED**: the
-canonical Vercel hostname returns `DEPLOYMENT_NOT_FOUND`, while the successful deployment of
-`173f85bf107a4ee6986c62434b17ae2b8fa2ba25` redirects anonymous users to Vercel SSO. No production
-storage, OAuth, or confirmation secret was deployed. Live Alexa+ and live AWS remain unverified.
+Public application deployment remains **NOT VERIFIED**: the canonical Vercel hostname returns
+`DEPLOYMENT_NOT_FOUND`, while the last observed successful deployment of
+`173f85bf107a4ee6986c62434b17ae2b8fa2ba25` redirects anonymous users to Vercel SSO. No deployment
+record was observed for the package commit at the release check, and no production storage, OAuth,
+or confirmation secret was deployed. Live Alexa+ and live AWS remain unverified.
 
 ## Implemented in Milestone 8
 
@@ -81,6 +84,8 @@ Final results:
 - complete suite: `185 passed`, with the unchanged non-failing Starlette/anyio deprecation warning;
 - final Governor review: passed after correcting the test count, simulated-state wording, Vercel
   evidence scope, and release-state labels; no BLOCKING/HIGH finding remains.
+- first package commit/push: `fcc40bf`; anonymous repository/README/license HTTP checks passed;
+  GitHub detected `Apache-2.0`, and public/local canonical license SHA-256 values matched.
 
 ## Milestone 8 external blockers and manual completion
 

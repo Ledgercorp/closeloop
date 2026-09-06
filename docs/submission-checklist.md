@@ -12,7 +12,7 @@
 - [x] Friction log contains only genuine reproduced issues and actionable recommendations.
 - [x] Submission copy and judging-rubric map avoid unbuilt Bedrock/AgentCore/Strands claims.
 - [x] Final focused checks, complete suite, diff review, and Governor review complete.
-- [ ] Commit, push, and signed-out repository/license verification complete.
+- [x] Package commit/push and signed-out repository/license verification complete.
 
 ## Video recording checklist
 
