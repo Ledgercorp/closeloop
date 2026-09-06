@@ -2,19 +2,142 @@
 
 ## Current phase
 
-Milestone 5 is complete at **SIMULATED AWS verification**. CloseLoop now has an optional Amazon
-DynamoDB repository that becomes the authoritative store for owner-scoped resolution state,
-confirmation, evidence provenance, lifecycle history, optimistic version, and immutable terminal
-outcome. The implementation uses boto3 against a single-region, on-demand table defined by
-CloudFormation. All prior MCP, Alexa+ compatibility, and deterministic verdict semantics remain
-intact.
+Milestone 6 is complete at **LOCAL UI/BROWSER VERIFIED**. CloseLoop now serves a polished,
+read-only MCP Apps proof card for confirmation, lifecycle progress, the canonical `Verified`,
+`Not completed`, and `Awaiting proof` outcomes, concise evidence summaries, and expandable
+execution/read-back/verifier provenance. Browser validation used the exact production resource and
+the official `AppBridge` / `PostMessageTransport` lifecycle with real CloseLoop MCP tool results.
 
-No live AWS resource was provisioned. This host has no AWS CLI, profile, or AWS credential
-environment, and it lacks the Java 17 or Docker runtime required for official DynamoDB Local.
-Integration was therefore exercised with Moto and is accurately labeled **SIMULATED**, not live or
-AWS-native integration verified. No Bedrock, AgentCore, Strands, Lambda, Step Functions,
-EventBridge, model, or cloud-agent path was added. Final UI polish, adversarial testing, demo
-optimization, submission packaging, and Milestone 6 work were not started.
+This is not Alexa+ host, simulator, device, or production verification. The prior live Alexa+
+onboarding blockers remain unchanged. The prior optional DynamoDB integration remains at
+**SIMULATED AWS verification**; no AWS resource was provisioned in this milestone. No provider,
+verifier, lifecycle, authentication, persistence, MCP tool, AWS, or verdict-write capability was
+added or changed. Adversarial testing, demo optimization, submission packaging, and Milestone 7
+were not started.
+
+## Implemented in Milestone 6
+
+- Replaced the minimal proof resource with a responsive consumer card that clearly separates the
+  requested task, current outcome, lifecycle progress, rationale, evidence summary, provenance,
+  technical identifiers, and state history.
+- Preserved the exact deterministic mappings: `PASS -> Verified`, `FAIL -> Not completed`, and
+  `INCONCLUSIVE -> Awaiting proof`. The presentation derives these states only from a consistent
+  lifecycle/verdict/consumer-state/execution/verification tuple; contradictory or malformed input
+  renders the neutral `Proof unavailable` state.
+- Added explicit confirmation-required copy stating that no action has run, plus neutral executing
+  and independent-checking presentation states. The progress label is `Independent check`, so FAIL
+  and INCONCLUSIVE never visually overclaim independent verification.
+- Added expandable, separately labeled execution claim, independent read-back, and deterministic
+  verifier sections. Detailed provenance is populated by `get_resolution_evidence`; the immediate
+  confirmation result remains a status response and does not pretend to include detailed evidence.
+- Kept the app read-only. It consumes `result.structuredContent`, renders values with `textContent`,
+  exposes no controls that call tools, and uses no storage, query-string, or verdict-override path.
+- Added a single focused live region, native keyboard-operable `details` disclosures, textual and
+  symbolic outcome cues, visible focus styling, forced-colors support, dark-mode support, safe
+  timestamp fallbacks, overflow handling, and a compact layout below 560 px.
+- Kept the stable `ui://closeloop/proof-card.html` MCP Apps resource, tool metadata linkage,
+  `text/html;profile=mcp-app` type, pinned `@modelcontextprotocol/ext-apps@1.7.5` import, and
+  jsDelivr-only resource CSP.
+- Added a validation-only host builder. It obtains confirmation and all three terminal results
+  through the real in-process MCP server, then sends those results into the unchanged production
+  HTML through `AppBridge`. Script-context JSON escaping prevents card or result text from ending
+  the host script. Synthetic contradictory and malformed fixtures are used only to test the
+  presentation trust boundary; they are never presented as real lifecycle outcomes.
+- Updated package, HTTP app, MCP server, and proof-card versions to `0.6.0`.
+
+## Milestone 6 verification evidence
+
+Authoritative starting state was clean `main` at
+`5c77b99ac88ca4b82e87d28a4fe74e5f3bdf0324`, aligned with `origin/main`. The pre-change full suite
+reproduced the Milestone 5 baseline at `57 passed`.
+
+Final code and regression commands:
+
+```bash
+uv lock --check
+PYTHONPATH=src uv run --no-editable python -m compileall -q src scripts main.py
+PYTHONPATH=src uv run --no-editable pytest -q tests/test_proof_card.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_alexa_integration.py tests/test_mcp_server.py
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_aws_infrastructure.py tests/test_dynamodb_repository.py \
+  tests/test_resolution_lifecycle.py tests/test_durable_repository.py \
+  tests/test_cancellation_verifier.py
+PYTHONPATH=src uv run --no-editable pytest -q
+```
+
+Results:
+
+- dependency lock check: passed (`62` packages resolved);
+- source, validation script, and Vercel entrypoint compilation: passed;
+- focused proof-card/UI suite: `15 passed`;
+- focused Alexa+/MCP regression suite: `12 passed`, with the pre-existing non-failing
+  Starlette/anyio deprecation warning;
+- focused AWS/lifecycle/verifier regression suite: `45 passed`;
+- complete suite: `72 passed`, with the same pre-existing warning.
+
+Browser fixture generation and local host commands:
+
+```bash
+validation_dir=$(mktemp -d /tmp/closeloop-proof-card-final.XXXXXX)
+PYTHONPATH=src uv run --no-editable python \
+  scripts/build_proof_card_validation.py "$validation_dir"
+cd "$validation_dir"
+python3 -m http.server 8767 --bind 127.0.0.1
+```
+
+The Codex in-app browser opened `confirmation.html`, `healthy.html`, `false_success.html`,
+`evidence_outage.html`, `contradictory.html`, `missing_status_booleans.html`, and
+`wrong_status_booleans.html`. Browser accessibility inspection verified respectively
+`Confirmation required`, `Verified`, `Not completed`, `Awaiting proof`, and neutral
+`Proof unavailable` outputs. The three terminal pages came from real MCP
+`start_resolution -> confirm_resolution_action -> get_resolution_evidence` lifecycles and the
+real deterministic verifier. The two malformed-status and one contradictory fixtures correctly
+failed closed.
+
+The healthy page was also verified at the default desktop viewport and at `390x844`. The narrow
+layout stacked lifecycle progress vertically without horizontal loss. Keyboard `Tab` focused
+`View evidence and provenance`, and `Return` expanded it; the accessibility tree exposed the
+execution claim, independent read-back, deterministic verifier, labels, values, and timestamps.
+No new console error occurred on the repaired validation pages. This establishes **LOCAL
+UI/BROWSER VERIFIED** rendering and MCP Apps bridge integration. It is not a formal WCAG audit and
+does not establish Alexa+ rendering compatibility because the Alexa+ Local Inspector/client remains
+unavailable.
+
+The Development Governor classified this consumer trust presentation as HIGH risk. Its
+pre-continuation review required canonical tuple validation, neutral confirmation/progress wording,
+script-safe host embedding, status/evidence shape discrimination, executed fail-closed fixtures,
+keyboard/accessibility inspection, and all three real lifecycle outcomes. The final implementation
+incorporates those requirements without changing backend trust boundaries.
+
+## Milestone 6 changed repository files
+
+- `HANDOFF.md`
+- `docs/friction-log.md`
+- `pyproject.toml`
+- `scripts/build_proof_card_validation.py`
+- `src/closeloop/http_app.py`
+- `src/closeloop/mcp_app.py`
+- `src/closeloop/mcp_server.py`
+- `tests/test_proof_card.py`
+- `uv.lock`
+
+## Milestone 6 limitations and next milestone
+
+- Live Alexa+ add-on onboarding, Local Inspector, simulator/device rendering, public HTTPS hosting,
+  and production OAuth account linking remain blocked for the reasons recorded in Milestone 4.
+- The proof card has a pinned jsDelivr runtime dependency allowed by its resource CSP. A future
+  production hardening pass should evaluate bundling the runtime.
+- The executing and verifying views are supported by the closed status contract, but the current
+  synchronous demo lifecycle normally advances through them within one confirmed tool call; the
+  browser proof therefore concentrates on the externally observable confirmation and terminal
+  evidence states.
+- Accessibility was checked through browser semantics, keyboard operation, responsive rendering,
+  forced-colors CSS, and non-color labels/symbols, not through a formal assistive-technology audit.
+
+Stop here before Milestone 7. The next milestone should follow its own explicit authority and may
+cover the deferred adversarial/security pass, final demo optimization, and submission packaging.
+Do not combine that work into this completed Milestone 6 checkpoint.
 
 ## Implemented in Milestone 5
 

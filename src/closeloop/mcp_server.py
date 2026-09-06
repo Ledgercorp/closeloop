@@ -272,7 +272,7 @@ def create_mcp_server(
             "Start a resolution, obtain explicit user confirmation, then confirm the action. "
             "Execution claims are not verdicts; use status and evidence to report the outcome."
         ),
-        version="0.5.0",
+        version="0.6.0",
         tools=tools,
         extensions=[proof_card],
         auth=auth_settings,

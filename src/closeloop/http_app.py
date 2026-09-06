@@ -57,7 +57,7 @@ def create_app(
     )
     app = FastAPI(
         title="CloseLoop",
-        version="0.5.0",
+        version="0.6.0",
         lifespan=mcp_http_app.router.lifespan_context,
     )
 
