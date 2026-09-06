@@ -17,7 +17,7 @@ Labels describe evidence actually established; they are not interchangeable.
 | Adversarial/security | **PARTIALLY ADVERSARIAL VERIFIED** | 31 confirmation plus 78 general adversarial cases; seven blocking findings fixed; Governor final review | No formal penetration, load/DoS, live identity, live cloud, or network-partition testing |
 | Demo provider | **SIMULATED** | Deterministic healthy, false-success, and evidence-outage modes traverse the real adapter/lifecycle/verifier path | No real subscription account or third-party provider |
 | Public repository | **VERIFIED** | Anonymous GitHub and raw-content requests returned 200 for the final package; GitHub detects Apache-2.0 and the public license matches canonical bytes | Repository About still contains a broken Vercel homepage that must be removed/replaced manually |
-| Public deployment | **NOT VERIFIED** | Prior commit `173f85bf` has a successful Vercel build record | No final-package deployment record was observed; canonical hostname is 404 and generated deployment URL redirects to Vercel SSO |
+| Public deployment | **NOT VERIFIED** | Final-package commit `fcc40bf` has a successful Vercel build record | Canonical hostname is 404 and anonymous `/`, `/health`, and `/mcp` requests to the generated deployment resolve to Vercel login/SSO rather than the application |
 | Live AWS | **NOT VERIFIED** | None claimed | Credentials, table, IAM, and CloudFormation execution unavailable |
 | Live Alexa+ | **NOT VERIFIED** | None claimed | Partner tooling, onboarding, public endpoint, OAuth, confirmation authority, and host rendering unavailable |
 

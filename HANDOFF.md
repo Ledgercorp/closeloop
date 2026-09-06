@@ -18,10 +18,10 @@ real local MCP/lifecycle/repository/provider/read-back/verifier path. The provid
 signer remain clearly labeled simulations.
 
 Public application deployment remains **NOT VERIFIED**: the canonical Vercel hostname returns
-`DEPLOYMENT_NOT_FOUND`, while the last observed successful deployment of
-`173f85bf107a4ee6986c62434b17ae2b8fa2ba25` redirects anonymous users to Vercel SSO. No deployment
-record was observed for the package commit at the release check, and no production storage, OAuth,
-or confirmation secret was deployed. Live Alexa+ and live AWS remain unverified.
+`DEPLOYMENT_NOT_FOUND`. Vercel successfully built final-package commit `fcc40bf`, but anonymous
+requests to `/`, `/health`, and `/mcp` on its generated deployment resolve to Vercel login/SSO
+rather than the application. No production storage, OAuth, or confirmation secret was deployed.
+Live Alexa+ and live AWS remain unverified.
 
 ## Implemented in Milestone 8
 
