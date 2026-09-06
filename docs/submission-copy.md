@@ -139,8 +139,8 @@ developer logs.
 - MCP Apps browser validation required careful script-context escaping and bridge sequencing.
 - Live DynamoDB validation was blocked by absent AWS credentials/CLI and unavailable Java/Docker
   for DynamoDB Local; Moto provided bounded simulation instead.
-- Vercel reported successful builds, but the canonical hostname is missing and generated deployment
-  URLs are SSO-gated, so no public deployment is claimed.
+- Vercel generated deployment URLs are protected, but the actual production alias is public. A
+  secret-free deterministic demo is deployed there; protected MCP actions remain bearer-gated.
 
 ## What we learned
 
@@ -171,22 +171,23 @@ claims until the customer-visible outcome is independently observed.
 
 ## Testing and evidence summary
 
-- Complete final suite: **185 passed** (Milestone 7 baseline: 183).
+- Complete final deployment suite: **187 passed** (Milestone 7 baseline: 183).
 - Focused confirmation-attestation: **31 passed**.
 - General adversarial/security: **78 passed**.
 - AWS/lifecycle/verifier: **46 passed**.
 - Alexa+/MCP: **12 passed**.
 - Proof-card/UI: **16 passed**.
 - Canonical demo: PASS → Verified; FAIL → Not completed; INCONCLUSIVE → Awaiting proof.
-- Browser: **LOCAL UI/BROWSER VERIFIED**.
+- Browser: **LOCAL UI/BROWSER VERIFIED**; the deterministic judge build is also publicly reachable.
 - Alexa+: **INTEGRATION VERIFIED locally; live NOT VERIFIED**.
 - AWS: **SIMULATED; live NOT VERIFIED**.
-- Public deployment: **NOT VERIFIED / not anonymously reachable**.
+- Public deployment: **VERIFIED** for the signed-out read-only deterministic judge demo; live
+  provider/auth/storage execution is not deployed.
 
 ## Submission links
 
 - Public repository: **https://github.com/Ledgercorp/closeloop**
 - Public video under three minutes: **[ADD VERIFIED YOUTUBE OR VIMEO URL]**
-- Public demo: **Not currently available; do not add the SSO-gated Vercel URL**
+- Public demo: **https://closeloop-zeta.vercel.app/demo/**
 - Primary track: **Alexa+**
 - Mini challenge: **AWS Builder**

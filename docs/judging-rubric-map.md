@@ -10,9 +10,9 @@ artifact.
 | Requirement | CloseLoop evidence | Repository/demo proof | Strength | Limitation |
 |---|---|---|---|---|
 | Alexa+ primary track | Self-hosted MCP server using Streamable HTTP and MCP 2025-11-25 | `src/closeloop/mcp_server.py`; `tests/test_alexa_integration.py`; 2:25 video | Strong local integration | No live Alexa+ client, add-on, Local Inspector, or account linking |
-| Runtime technology use | Official MCP Python SDK is imported and executes the five-tool lifecycle | `pyproject.toml`; `src/closeloop/mcp_server.py`; generated demo cards | Strong local integration | Public deployment is not anonymously reachable |
+| Runtime technology use | Official MCP Python SDK is imported and executes the five-tool lifecycle | `pyproject.toml`; `src/closeloop/mcp_server.py`; generated demo cards | Strong local integration plus public deterministic demo | Public demo is read-only; live MCP actions remain authenticated and are not publicly exercised |
 | Working demonstration | Confirmation plus PASS/FAIL/INCONCLUSIVE are generated through the real local MCP path | `scripts/build_proof_card_validation.py`; 0:20–2:25 video | Strong and reproducible | Demo provider and confirmation signer are labeled simulations |
-| Public source and setup | Public GitHub repository, canonical Apache-2.0, quick-start commands | `README.md`; `LICENSE` | Strong after GitHub detects license | Repository About license must be checked after push |
+| Public source and setup | Public GitHub repository, canonical Apache-2.0, quick-start commands | `README.md`; `LICENSE` | Strong; anonymous access and GitHub license detection verified | Public video remains a manual submission step |
 | Hackathon provenance | New CloseLoop code is separated from prior CUF concepts | `docs/build-provenance.md`; README provenance | Explicit | Prior conceptual experience is disclosed, not claimed as new |
 | Product feedback | Actual tooling attempts, successes, limits, and recommendations | `docs/product-feedback.md`; `docs/friction-log.md` | Detailed and reproducible | Some Alexa+/AWS tooling was inaccessible |
 | AWS Builder | DynamoDB is the optional authoritative repository, not a decorative call | `src/closeloop/dynamodb_repository.py`; `infra/aws/closeloop-dynamodb.json`; 2:25 video | Meaningful architecture | Moto-simulated; no live AWS deployment |
@@ -45,8 +45,8 @@ the synchronous demo.
 
 ## Submission risk
 
-The source package is ready for an Alexa+ self-hosted-MCP entry, but live Alexa+ host behavior is
-not verified. The public Vercel homepage is unavailable and its successful deployment is SSO-gated.
-The video must therefore show the local MCP server functioning and preserve the simulation label.
-A real Alexa+ client/add-on connection and anonymously reachable deployment would strengthen
-eligibility evidence but must not be claimed until actually exercised.
+The source package and signed-out deterministic Vercel demo are ready for an Alexa+ self-hosted-MCP
+entry, but live Alexa+ host behavior is not verified. The public cards are pre-generated through the
+real local MCP/lifecycle/verifier path and must retain their simulation labels. A real Alexa+
+client/add-on connection would strengthen eligibility evidence but must not be claimed until
+actually exercised.

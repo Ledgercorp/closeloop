@@ -57,19 +57,19 @@ Capture these from a fresh generated demo unless another source is specified:
    you also provide the required contribution URL, repository URL, GitHub username, and description.
 3. Paste the reviewed fields from `docs/submission-copy.md`; replace every bracketed placeholder.
 4. Add the public repository URL: `https://github.com/Ledgercorp/closeloop`.
-5. In GitHub’s About panel, confirm the repository is public, Apache-2.0 is detected/visible, and
-   remove the broken `https://closeloop-sage.vercel.app` homepage or replace it only with a verified
-   anonymous URL.
+5. In GitHub’s About panel, confirm the repository is public, Apache-2.0 is detected/visible, and the
+   homepage points to the signed-out judge demo: `https://closeloop-zeta.vercel.app/demo/`.
 6. Add the final public YouTube/Vimeo URL and confirm duration, English audio/captions, permissions,
    and signed-out playback.
 7. Upload the strongest screenshots above. Do not label local cards as Alexa+ host screenshots.
 8. Paste `docs/product-feedback.md` and the relevant `docs/friction-log.md` entries into the
    product-feedback/friction fields; include DynamoDB use for AWS Builder.
-9. State plainly that the provider and browser demo are local simulations, DynamoDB is Moto-
-   simulated, Alexa+/MCP is locally integration verified, and live Alexa+/AWS are not verified.
-10. If a public service is required, provision shared storage, OAuth/account linking, and a trusted
-    confirmation authority with production secrets before disabling Vercel SSO. Never deploy the
-    test or recording signer. Re-run anonymous `/`, `/health`, and unauthenticated `/mcp` checks.
+9. State plainly that the public browser demo is a deterministic static build with a simulated
+   provider/local-only build signer, DynamoDB is Moto-simulated, Alexa+/MCP is locally integration
+   verified, and live Alexa+/AWS are not verified.
+10. If live public execution is later required, provision shared storage, OAuth/account linking,
+    and a trusted confirmation authority with production secrets. Never deploy the test or
+    recording signer. Re-run anonymous `/`, `/health`, `/demo/`, and unauthenticated `/mcp` checks.
 11. Review the submission preview in a signed-out browser. Test every repository, video, image, and
     optional demo link; remove inaccessible links.
 12. Submit before **October 23, 2026 at 12:00 PM PDT** and save the final confirmation/receipt.
@@ -78,7 +78,7 @@ Capture these from a fresh generated demo unless another source is specified:
 
 - A public video URL does not exist yet; recording/upload is a required manual action.
 - No real Alexa+ client/add-on/Local Inspector/account-linking lifecycle has been exercised.
-- The current Vercel hostname is unavailable and successful deployment URLs are SSO-gated.
+- The read-only judge demo is publicly verified; live provider-backed execution is not deployed.
 - Safe public execution needs production shared storage, OAuth, and confirmation-authority
   configuration that is not present in this environment.
 - Live AWS/DynamoDB remains unverified.

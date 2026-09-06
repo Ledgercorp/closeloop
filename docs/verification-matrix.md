@@ -13,17 +13,17 @@ Labels describe evidence actually established; they are not interchangeable.
 | MCP protocol | **INTEGRATION VERIFIED** | Standard MCP Inspector plus tests cover Streamable HTTP, 2025-11-25/2025-03-26, strict calls, and safe errors | Inspector ran on an unsupported older Node patch with successful commands |
 | Alexa+ integration | **INTEGRATION VERIFIED** | Server implements documented self-hosted MCP contracts, schemas, protected-resource metadata, and conversational results | No Alexa AI CLI, add-on, Local Inspector, simulator, device, account link, or live client |
 | MCP Apps resource | **INTEGRATION VERIFIED** | Resource discovery/read, metadata linkage, MIME profile, AppBridge result delivery, and text fallback tested | Not rendered by an Alexa+ host; CDN runtime dependency remains |
-| Proof-card browser UI | **LOCAL UI/BROWSER VERIFIED** | Real lifecycle cards rendered for confirmation and all three outcomes; responsive, keyboard, semantics, injection, and fail-closed states checked | Not a formal assistive-technology/WCAG audit |
+| Proof-card browser UI | **LOCAL UI/BROWSER VERIFIED** | Real lifecycle cards rendered for confirmation and all three outcomes; the deterministic build is also publicly reachable and rendered signed out at `https://closeloop-zeta.vercel.app/demo/` | Not rendered by an Alexa+ host; not a formal assistive-technology/WCAG audit |
 | Adversarial/security | **PARTIALLY ADVERSARIAL VERIFIED** | 31 confirmation plus 78 general adversarial cases; seven blocking findings fixed; Governor final review | No formal penetration, load/DoS, live identity, live cloud, or network-partition testing |
 | Demo provider | **SIMULATED** | Deterministic healthy, false-success, and evidence-outage modes traverse the real adapter/lifecycle/verifier path | No real subscription account or third-party provider |
-| Public repository | **VERIFIED** | Anonymous GitHub and raw-content requests returned 200 for the final package; GitHub detects Apache-2.0 and the public license matches canonical bytes | Repository About still contains a broken Vercel homepage that must be removed/replaced manually |
-| Public deployment | **NOT VERIFIED** | Final-package commit `fcc40bf` has a successful Vercel build record | Canonical hostname is 404 and anonymous `/`, `/health`, and `/mcp` requests to the generated deployment resolve to Vercel login/SSO rather than the application |
+| Public repository | **VERIFIED** | Anonymous GitHub and raw-content requests returned 200; GitHub detects Apache-2.0 and the public license matches canonical bytes | Submission video remains a separate manual publication step |
+| Public deployment | **VERIFIED** | Signed-out requests to `https://closeloop-zeta.vercel.app` returned 200 for `/`, `/health`, `/demo/`, confirmation, all three outcome cards, and the manifest; a fresh browser rendered the Verified card and expanded provenance without SSO | Read-only deterministic demo with simulated provider/local build signer; `/mcp` correctly returns 401 without bearer auth; no live provider, production storage/auth, Alexa+, or AWS |
 | Live AWS | **NOT VERIFIED** | None claimed | Credentials, table, IAM, and CloudFormation execution unavailable |
 | Live Alexa+ | **NOT VERIFIED** | None claimed | Partner tooling, onboarding, public endpoint, OAuth, confirmation authority, and host rendering unavailable |
 
 ## Final evidence counts
 
-- Milestone 8 complete suite: **185 passed** (Milestone 7 baseline: 183).
+- Final deployment package complete suite: **187 passed** (Milestone 7 baseline: 183).
 - Confirmation-attestation suite: **31 passed**.
 - General adversarial/security suite: **78 passed**.
 - AWS/lifecycle/verifier regression: **46 passed**.

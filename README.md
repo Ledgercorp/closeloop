@@ -17,6 +17,11 @@ shows auto-renew is still on, and CloseLoop refuses to call the task done.
 
 Primary track: **Alexa+** · Mini challenge: **AWS Builder** · License: [Apache-2.0](LICENSE)
 
+**[Open the public judge demo](https://closeloop-zeta.vercel.app/demo/)** — a signed-out,
+read-only deterministic demonstration of confirmation plus Verified, Not completed, and Awaiting
+proof. It uses pre-generated results from the real CloseLoop lifecycle/verifier path and is
+explicitly not a live Alexa+, provider, or AWS deployment.
+
 ## Run the deterministic demo
 
 Prerequisites: Python 3.11+ and [uv](https://docs.astral.sh/uv/).
@@ -112,7 +117,7 @@ a bearer-token issuer, and a separate trusted confirmation authority. Missing pr
 authentication, or confirmation configuration fails closed. Never deploy the test or recording
 signing keys.
 
-The final package has **185 passing tests** (the Milestone 7 baseline was 183). Security is
+The final deployment package has **187 passing tests** (the Milestone 7 baseline was 183). Security is
 **PARTIALLY ADVERSARIAL VERIFIED**:
 109 focused adversarial/confirmation cases cover verdict manipulation, authorization isolation,
 confirmation replay and tampering, lifecycle races, forged evidence, MCP abuse, UI injection,
@@ -131,10 +136,10 @@ information leakage, and failure behavior. Seven blocking findings were fixed. S
 - [Build provenance](docs/build-provenance.md)
 - [Trust model](docs/trust-model.md)
 
-The repository is public, but its current Vercel deployment is not an eligible public demo: the
-canonical homepage returns `DEPLOYMENT_NOT_FOUND`, and the latest successful deployment is protected
-by Vercel SSO. The local demo above is the strongest safe path until production storage, OAuth,
-confirmation-authority configuration, and public hosting are available.
+The repository and deterministic judge demo are publicly reachable. The canonical Vercel URL serves
+`/`, `/health`, and `/demo/` without authentication; `/mcp` remains fail-closed behind bearer
+authentication. The public demo is read-only and contains no production storage, OAuth,
+confirmation-authority secret, test signer, live provider, live Alexa+, or live AWS configuration.
 
 ## Provenance and license
 
