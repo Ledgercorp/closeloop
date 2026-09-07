@@ -12,6 +12,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from .auth import auth_configuration_from_environment
 from .lifecycle import ResolutionService
 from .mcp_server import create_mcp_server
+from .public_demo_api import PublicDemoRunnerProtocol, install_public_demo_api
 
 
 def _csv_environment(name: str) -> list[str]:
@@ -40,6 +41,9 @@ def create_app(
     service: ResolutionService | None = None,
     auth_settings: AuthSettings | None = None,
     token_verifier: TokenVerifier | None = None,
+    public_demo_runner: PublicDemoRunnerProtocol | None = None,
+    public_demo_max_concurrency: int = 4,
+    public_demo_timeout_seconds: float = 5.0,
 ) -> FastAPI:
     if auth_settings is None and token_verifier is None:
         auth_settings, token_verifier = auth_configuration_from_environment()
@@ -97,6 +101,13 @@ def create_app(
             "scopes_supported": list(auth_settings.required_scopes or []),
             "bearer_methods_supported": ["header"],
         }
+
+    install_public_demo_api(
+        app,
+        runner=public_demo_runner,
+        max_concurrency=public_demo_max_concurrency,
+        timeout_seconds=public_demo_timeout_seconds,
+    )
 
     public_demo_dir = Path(__file__).with_name("public_demo")
     app.mount(

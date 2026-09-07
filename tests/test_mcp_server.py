@@ -379,7 +379,9 @@ def test_public_demo_is_read_only_labeled_and_secret_free(tmp_path):
         )
 
     assert index.status_code == 200
-    assert "Public deterministic demonstration" in index.text
+    assert "Verified demo experience" in index.text
+    assert "DEMO_API_PATH" in index.text
+    assert "/demo/run" in index.text
     assert "local-validation-only-confirmation-secret" not in index.text
     assert healthy.status_code == 200
     assert "CloseLoop proof card" in healthy.text
