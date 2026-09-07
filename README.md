@@ -18,28 +18,27 @@ shows auto-renew is still on, and CloseLoop refuses to call the task done.
 Primary track: **Alexa+** · Mini challenge: **AWS Builder** · License: [Apache-2.0](LICENSE)
 
 **[Open the public judge demo](https://closeloop-zeta.vercel.app/demo/)** — a signed-out,
-read-only deterministic demonstration of confirmation plus Verified, Not completed, and Awaiting
-proof. It uses pre-generated results from the real CloseLoop lifecycle/verifier path and is
-explicitly not a live Alexa+, provider, or AWS deployment.
+isolated deterministic demonstration of confirmation plus Verified, Not completed, and Awaiting
+proof. The browser submits only one of three allowed scenarios; the deployed server runs the real
+CloseLoop lifecycle, independent read-back, and verifier, then returns presentation-safe evidence.
+It is explicitly not a live Alexa+, production-provider, or AWS deployment.
 
-## Run the deterministic demo
+## Run the server-backed demo locally
 
 Prerequisites: Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync --locked --extra test --no-editable
-demo_dir=$(mktemp -d /tmp/closeloop-demo.XXXXXX)
-PYTHONPATH=src uv run --no-editable python \
-  scripts/build_proof_card_validation.py "$demo_dir"
-cd "$demo_dir"
-python3 -m http.server 8768 --bind 127.0.0.1
+PYTHONPATH=src uv run --no-editable uvicorn main:app \
+  --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8768/`. The recording index links to confirmation and all three outcomes.
-Every terminal page is produced through the real in-process MCP server, lifecycle, repository,
-provider adapter, independent read-back, deterministic verifier, and production proof-card code.
-The provider and confirmation signer are explicitly local simulations; this is not a live Alexa+
-client, real subscription provider, or live AWS environment.
+Open `http://127.0.0.1:8000/demo/`. Confirm starts the narrow anonymous `POST /demo/run` flow. The
+route accepts exactly `healthy`, `false_success`, or `evidence_outage`, creates isolated temporary
+state, and uses the real lifecycle, demo provider, independent read-back, and deterministic
+verifier. The browser cannot submit a verdict, status, success value, evidence, provider, production
+resolution, or trusted production confirmation. The provider and demo confirmation remain explicit
+simulations; this is not a live Alexa+ client, real subscription provider, or live AWS environment.
 
 The [sub-three-minute video script](docs/demo-script.md) gives the exact recording order and
 narration.
@@ -117,7 +116,8 @@ a bearer-token issuer, and a separate trusted confirmation authority. Missing pr
 authentication, or confirmation configuration fails closed. Never deploy the test or recording
 signing keys.
 
-The final deployment package has **187 passing tests** (the Milestone 7 baseline was 183). Security is
+The final server-backed demo package has **214 passing tests** (the pre-integration deployment
+baseline was 187). Security is
 **PARTIALLY ADVERSARIAL VERIFIED**:
 109 focused adversarial/confirmation cases cover verdict manipulation, authorization isolation,
 confirmation replay and tampering, lifecycle races, forged evidence, MCP abuse, UI injection,
@@ -138,8 +138,11 @@ information leakage, and failure behavior. Seven blocking findings were fixed. S
 
 The repository and deterministic judge demo are publicly reachable. The canonical Vercel URL serves
 `/`, `/health`, and `/demo/` without authentication; `/mcp` remains fail-closed behind bearer
-authentication. The public demo is read-only and contains no production storage, OAuth,
-confirmation-authority secret, test signer, live provider, live Alexa+, or live AWS configuration.
+authentication. `/demo/run` is an anonymous, isolated simulation surface—not a production action
+API. Its concurrency admission is per Vercel process/instance, not distributed abuse prevention;
+its Origin check blocks ordinary cross-origin browsers but is not authentication and does not stop
+non-browser clients. No production storage, OAuth, confirmation-authority secret, test signer, live
+provider, live Alexa+, or live AWS configuration is exposed.
 
 ## Provenance and license
 

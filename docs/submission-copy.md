@@ -139,8 +139,9 @@ developer logs.
 - MCP Apps browser validation required careful script-context escaping and bridge sequencing.
 - Live DynamoDB validation was blocked by absent AWS credentials/CLI and unavailable Java/Docker
   for DynamoDB Local; Moto provided bounded simulation instead.
-- Vercel generated deployment URLs are protected, but the actual production alias is public. A
-  secret-free deterministic demo is deployed there; protected MCP actions remain bearer-gated.
+- Vercel generated deployment URLs are protected, but the actual production alias is public. Its
+  isolated deterministic demo calls the real server lifecycle/verifier; protected MCP actions
+  remain bearer-gated.
 
 ## What we learned
 
@@ -171,17 +172,19 @@ claims until the customer-visible outcome is independently observed.
 
 ## Testing and evidence summary
 
-- Complete final deployment suite: **187 passed** (Milestone 7 baseline: 183).
+- Complete server-backed demo suite: **214 passed** (pre-integration deployment baseline: 187;
+  Milestone 7 baseline: 183).
 - Focused confirmation-attestation: **31 passed**.
 - General adversarial/security: **78 passed**.
 - AWS/lifecycle/verifier: **46 passed**.
 - Alexa+/MCP: **12 passed**.
 - Proof-card/UI: **16 passed**.
 - Canonical demo: PASS → Verified; FAIL → Not completed; INCONCLUSIVE → Awaiting proof.
-- Browser: **LOCAL UI/BROWSER VERIFIED**; the deterministic judge build is also publicly reachable.
+- Browser: **LOCAL UI/BROWSER VERIFIED**; the public demo is **END-TO-END VERIFIED** against the
+  deployed isolated server lifecycle/verifier.
 - Alexa+: **INTEGRATION VERIFIED locally; live NOT VERIFIED**.
 - AWS: **SIMULATED; live NOT VERIFIED**.
-- Public deployment: **VERIFIED** for the signed-out read-only deterministic judge demo; live
+- Public deployment: **VERIFIED** for the signed-out isolated deterministic judge demo; live
   provider/auth/storage execution is not deployed.
 
 ## Submission links

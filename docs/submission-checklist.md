@@ -16,8 +16,8 @@
 
 ## Video recording checklist
 
-- [ ] Generate a fresh demo directory with the exact command in `docs/demo-script.md`.
-- [ ] Confirm the recording index visibly says **Local demonstration** and identifies simulations.
+- [ ] Open `https://closeloop-zeta.vercel.app/demo/` in a fresh signed-out browser.
+- [ ] Confirm the polished UI identifies the simulated provider and non-live Alexa+/AWS boundaries.
 - [ ] Record the canonical request: “Alexa, cancel my subscription and make sure I won’t be charged again.”
 - [ ] Show **Confirmation required** before any action.
 - [ ] Show healthy **PASS → Verified** and expand execution/read-back/verifier provenance.
@@ -32,14 +32,14 @@
 
 ## Exact submission screenshots
 
-Capture these from a fresh generated demo unless another source is specified:
+Capture these from the signed-out public demo unless another source is specified:
 
-1. **Hero / confirmation:** `confirmation.html`, showing the task and “Confirmation required.”
-2. **Primary result:** `healthy.html`, showing “Verified” and completed lifecycle.
-3. **False-success proof:** `false_success.html` expanded so provider success, auto-renew on, and
-   “Not completed” are visible together. This is the highest-value screenshot.
-4. **Uncertainty proof:** `evidence_outage.html`, showing “Awaiting proof.”
-5. **Provenance detail:** healthy card expanded to show action receipt, independent read-back,
+1. **Hero / confirmation:** initial public demo state showing the task and “Confirmation required.”
+2. **Primary result:** select Verified path, confirm, and capture “Verified” plus completed lifecycle.
+3. **False-success proof:** select False success and expand proof so provider success, auto-renew on,
+   and “Not completed” are visible together. This is the highest-value screenshot.
+4. **Uncertainty proof:** select Evidence outage and capture “Awaiting proof.”
+5. **Provenance detail:** Verified result expanded to show action receipt, independent read-back,
    deterministic verifier, timestamps, and identifiers.
 6. **Implemented architecture:** README “How it works” diagram, without aspirational services.
 7. **AWS proof:** `docs/aws-dynamodb.md` data/concurrency section plus the one-table
@@ -64,9 +64,9 @@ Capture these from a fresh generated demo unless another source is specified:
 7. Upload the strongest screenshots above. Do not label local cards as Alexa+ host screenshots.
 8. Paste `docs/product-feedback.md` and the relevant `docs/friction-log.md` entries into the
    product-feedback/friction fields; include DynamoDB use for AWS Builder.
-9. State plainly that the public browser demo is a deterministic static build with a simulated
-   provider/local-only build signer, DynamoDB is Moto-simulated, Alexa+/MCP is locally integration
-   verified, and live Alexa+/AWS are not verified.
+9. State plainly that the public browser demo calls an isolated server-side lifecycle/verifier with
+   a deterministic simulated provider and demo-only confirmation, DynamoDB is Moto-simulated,
+   Alexa+/MCP is locally integration verified, and live provider/Alexa+/AWS are not verified.
 10. If live public execution is later required, provision shared storage, OAuth/account linking,
     and a trusted confirmation authority with production secrets. Never deploy the test or
     recording signer. Re-run anonymous `/`, `/health`, `/demo/`, and unauthenticated `/mcp` checks.
@@ -78,7 +78,8 @@ Capture these from a fresh generated demo unless another source is specified:
 
 - A public video URL does not exist yet; recording/upload is a required manual action.
 - No real Alexa+ client/add-on/Local Inspector/account-linking lifecycle has been exercised.
-- The read-only judge demo is publicly verified; live provider-backed execution is not deployed.
+- The isolated server-backed judge demo is publicly verified; live provider-backed execution is not
+  deployed.
 - Safe public execution needs production shared storage, OAuth, and confirmation-authority
   configuration that is not present in this environment.
 - Live AWS/DynamoDB remains unverified.

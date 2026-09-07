@@ -2,31 +2,72 @@
 
 ## Current phase
 
-Milestone 8 and the public judge-demo deployment fix are complete. The final complete suite passes,
-and the Development Governor found no BLOCKING/HIGH issue after its claim review. The package commit
-was pushed and anonymously verified: the repository and README return HTTP 200, GitHub reports the
-repository public and detects `Apache-2.0`, and the public license checksum matches canonical Apache
-text. The public README, deterministic recording index, sub-three-minute storyboard, submission
-copy, judging map, verification matrix, product feedback, screenshot
-plan, and manual checklist now tell one evidence-backed story without changing the CloseLoop trust
-model or adding providers/cloud dependencies.
+Milestone 8, the public deployment fix, and the final polished-demo integration are complete. The
+Claude-designed UI at `https://closeloop-zeta.vercel.app/demo/` now sends only an allowlisted scenario
+to `POST /demo/run`; it no longer implements a provider, read-back, or verifier in browser JavaScript.
+The deployed route creates isolated temporary state, runs the real CloseLoop lifecycle, deterministic
+demo provider, independent read-back, and verifier, and returns an explicit presentation DTO.
 
-Focused current-diff results are green: `2` dedicated demo-package tests; `30` combined demo/MCP/UI;
-`46` AWS/lifecycle/verifier; and `109` confirmation/adversarial security. The generated demo manifest
-proves `PASS -> Verified`, `FAIL -> Not completed`, and `INCONCLUSIVE -> Awaiting proof` through the
-real local MCP/lifecycle/repository/provider/read-back/verifier path. The provider and recording
-signer remain clearly labeled simulations.
+Public demo verification is **PUBLIC DEMO END-TO-END VERIFIED**. Signed-out requests return 200 for
+`/`, `/health`, `/demo/`, and all three valid `/demo/run` scenarios. A fresh signed-out browser
+rendered `PASS -> Verified`, `FAIL -> Not completed`, and `INCONCLUSIVE -> Awaiting proof` from the
+deployed server responses. The false-success response proved a provider success claim plus
+independent `auto_renew: true` read-back produced server verifier `FAIL`. Extra verdict input was
+rejected with 422, cross-origin browser input with 403, and unauthenticated `/mcp` remained 401.
 
-Public judge-demo deployment is **VERIFIED** at
-`https://closeloop-zeta.vercel.app/demo/`. Signed-out requests return 200 for `/`, `/health`, the
-demo index, confirmation card, all three outcome cards, and `demo-results.json`; a fresh browser
-rendered the Verified card and expanded execution/read-back/verifier provenance without an SSO
-gate. Unauthenticated `/mcp` is reachable and correctly returns 401 `Authentication required`.
-This is a read-only deterministic build generated through the real local lifecycle/verifier path,
-not live provider execution. No production storage, OAuth, confirmation secret, test signer, or
-local-only attestation was deployed. Live Alexa+ and live AWS remain unverified.
+The final suite passes **214 tests**; focused public-demo API/browser/security plus MCP/demo tests pass
+`39`. The Development Governor's corrected HIGH-risk final review reported no BLOCKING/HIGH finding.
+The public route cannot select a provider, access production resolutions, consume production
+confirmation, or receive client-supplied verdict/evidence. Its ephemeral confirmation proves only
+that the isolated route authorized this simulated run in response to a request; it is not evidence
+of a browser button, human identity or intent, or a production trusted confirmation. Live provider
+execution, live Alexa+, live AWS, production OAuth/account linking, and Alexa+ host proof-card
+rendering remain unverified.
 
-## Public judge-demo deployment fix
+## Final public demo server integration
+
+- Started clean at `3cc2e6436a3e7bc95a8bb8ddfe8706028e19b908`; executable integration commit
+  `22d0866` was pushed to `origin/main` and deployed through the connected Vercel project.
+- Added `src/closeloop/public_demo_api.py`: exact `POST /demo/run` schema, three-scenario allowlist,
+  streamed 96-byte body cap, duplicate/extra/type/content-encoding/origin rejection, explicit frozen
+  response models, generic no-cache errors, bounded concurrency, and execution timeout.
+- The route hard-binds `DemoProvider`, a random per-run owner and ephemeral confirmation key, a
+  temporary SQLite repository, and `ResolutionService`; it never consults environment repository,
+  provider, MCP, bearer-auth, or production confirmation factories.
+- Added `scripts/integrate_claude_demo.py` and transformed the supplied Claude Design bundle in
+  `src/closeloop/public_demo/index.html`. The UI sends only `{scenario}`, exact-validates the server
+  result, prevents duplicate/stale rendering, shows a neutral pre-response state, replays only
+  validated server-recorded lifecycle evidence, and fails closed to `Proof unavailable`.
+- Added `tests/test_public_demo_api.py` and updated `tests/test_mcp_server.py`. The tests prove all
+  three real outcomes, provider/read-back/verifier order, strict request rejection, production
+  factory isolation, response allowlisting, timeout/saturation behavior, no local browser verifier,
+  and fail-closed presentation.
+- Governor correction: pre-response UI must never imply confirmation/execution, and every outcome
+  must explicitly refer to the isolated simulation. Both HIGH findings were fixed and re-reviewed.
+- Admission control is **per process/Vercel instance**, not distributed or global rate limiting.
+  Origin checking blocks ordinary cross-origin browser use but is not authentication and cannot stop
+  arbitrary non-browser clients. The route is intentionally a narrowly scoped anonymous simulation.
+- No test signer, confirmation secret, production token, credential, private key, local path, or
+  production resolution data appears in the deployed route or browser bundle.
+
+Validation commands:
+
+```bash
+PYTHONPATH=src uv run --no-editable pytest -q \
+  tests/test_public_demo_api.py tests/test_mcp_server.py tests/test_demo_submission.py
+PYTHONPATH=src uv run --no-editable pytest -q
+git diff --check
+curl -i https://closeloop-zeta.vercel.app/
+curl -i https://closeloop-zeta.vercel.app/health
+curl -i https://closeloop-zeta.vercel.app/demo/
+curl -i -X POST https://closeloop-zeta.vercel.app/demo/run \
+  -H 'Content-Type: application/json' --data '{"scenario":"false_success"}'
+curl -i -X POST https://closeloop-zeta.vercel.app/mcp \
+  -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"public-probe","version":"1"}}}'
+```
+
+## Historical public judge-demo deployment fix
 
 - Started clean on `38b288f3f0bd867e08d5c5f69af3ead58b36a760`; the deployment code commit is
   `ee970a2efd81d7b522b081ab75d0541333fbc64b`.
