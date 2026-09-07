@@ -316,6 +316,35 @@ def test_public_demo_timeout_and_saturation_fail_closed_without_queueing():
     assert "Verified" not in responses[0].text
 
 
+def test_public_demo_path_without_trailing_slash_redirects_to_bundle():
+    with make_client() as client:
+        response = client.get("/demo", follow_redirects=False)
+
+    assert response.status_code == 308
+    assert response.headers["location"] == "/demo/"
+
+
+def _bundle_template() -> str:
+    bundle = (
+        Path(__file__).parents[1] / "src" / "closeloop" / "public_demo" / "index.html"
+    ).read_text(encoding="utf-8")
+    match = re.search(
+        r'<script type="__bundler/template">\s*(.*?)\s*</script>', bundle, re.DOTALL
+    )
+    assert match is not None
+    return json.loads(match.group(1))
+
+
+def test_polished_browser_bundle_has_title_language_and_mobile_layout_rules():
+    template = _bundle_template()
+
+    assert '<html lang="en">' in template
+    assert "<title>CloseLoop demo</title>" in template
+    assert "@media (max-width: 640px)" in template
+    assert '[role="group"][aria-label="Demo scenarios"]' in template
+    assert '[aria-labelledby="lifecycle-heading"] ol' in template
+
+
 def test_polished_browser_bundle_only_requests_scenario_and_has_no_verifier_logic():
     bundle = (
         Path(__file__).parents[1] / "src" / "closeloop" / "public_demo" / "index.html"

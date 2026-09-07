@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
@@ -101,6 +102,16 @@ def create_app(
             "scopes_supported": list(auth_settings.required_scopes or []),
             "bearer_methods_supported": ["header"],
         }
+
+    @app.get("/demo", include_in_schema=False)
+    def public_demo_without_trailing_slash() -> RedirectResponse:
+        """Send judges who omit the trailing slash to the static demo bundle.
+
+        The authenticated MCP catch-all mounted at "/" would otherwise answer
+        this path before Starlette's slash redirect could run.
+        """
+
+        return RedirectResponse("/demo/", status_code=308)
 
     install_public_demo_api(
         app,

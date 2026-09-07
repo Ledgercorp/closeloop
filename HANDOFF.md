@@ -15,14 +15,47 @@ deployed server responses. The false-success response proved a provider success 
 independent `auto_renew: true` read-back produced server verifier `FAIL`. Extra verdict input was
 rejected with 422, cross-origin browser input with 403, and unauthenticated `/mcp` remained 401.
 
-The final suite passes **214 tests**; focused public-demo API/browser/security plus MCP/demo tests pass
-`39`. The Development Governor's corrected HIGH-risk final review reported no BLOCKING/HIGH finding.
+The final release-QA suite passes **216 tests** (server-backed demo package: 214); focused public-demo
+API/browser/security plus MCP/demo tests pass `41`. The Development Governor's corrected HIGH-risk final review reported no BLOCKING/HIGH finding.
 The public route cannot select a provider, access production resolutions, consume production
 confirmation, or receive client-supplied verdict/evidence. Its ephemeral confirmation proves only
 that the isolated route authorized this simulated run in response to a request; it is not evidence
 of a browser button, human identity or intent, or a production trusted confirmation. Live provider
 execution, live Alexa+, live AWS, production OAuth/account linking, and Alexa+ host proof-card
 rendering remain unverified.
+
+## Final release QA
+
+- Ran from clean `8dead4a` (the commit Vercel production serves) on branch
+  `claude/closeloop-final-release-qa-m2owxj`. Signed-out live GETs: `/` 200, `/health` 200,
+  `/demo/` 200, `/demo/nope` 404, `/mcp` 401 without a challenge header. The QA sandbox's egress
+  policy blocked direct connections to the Vercel host, so live `POST /demo/run` was not re-sent;
+  every backend, MCP, and browser check below ran locally against the identical deployed commit.
+- Backend: all three scenarios produced server-generated PASS/FAIL/INCONCLUSIVE; extra verdict
+  fields, unknown scenarios, duplicate keys, wrong media types, encodings, oversize bodies, foreign
+  and `null` origins, and oversubscription were rejected as designed.
+- MCP (MCP Inspector CLI plus direct JSON-RPC): negotiation for `2025-11-25` and `2025-03-26`,
+  exactly five closed-schema tools with output schemas, no verdict-write tool, safe errors for
+  extra fields, wrong types, unknown tools/methods, malformed JSON, and oversize inputs; forged,
+  stale, wrong-digest, wrong-owner, replayed, and post-terminal confirmations were refused;
+  cross-principal reads and lists returned nothing.
+- Browser (Chromium, desktop and 390x844): all three outcomes rendered from server data; aborted,
+  503, tampered, mismatched, extra-key, and non-server-generated responses rendered
+  `Proof unavailable`; keyboard operation and focus rings work; no console errors.
+- Findings: no BLOCKING. HIGH: at 390px the fixed scenario bar stacked to 208px and covered the
+  outcome text while stage labels overlapped. MEDIUM: `/demo` without a trailing slash returned 404
+  from the MCP catch-all; `docs/demo-script.md` still described the retired local recording index;
+  the bundle lacked a document title and `lang`. LOW (left as is): public FastAPI `/docs`, legacy
+  validation pages under `/demo/`, muted pending-text contrast, confirm button below the mobile
+  fold.
+- Fixes: explicit `308` redirect from `/demo` to `/demo/`; presentation-only bundle corrections
+  (`lang="en"`, `<title>CloseLoop demo</title>`, a `max-width: 640px` layout rule) applied to the
+  served bundle and to `scripts/integrate_claude_demo.py` so regeneration keeps them;
+  `docs/demo-script.md` now records from the public demo. Two tests were added; the complete suite
+  is `216 passed`.
+- These fixes are on the QA branch. After merge to `main` and the Vercel production deploy,
+  re-verify signed out: `GET /demo` returns `308` to `/demo/`, the 390px layout shows a single-row
+  scenario bar, and the tab title reads `CloseLoop demo`.
 
 ## Final public demo server integration
 

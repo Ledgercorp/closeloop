@@ -18,6 +18,49 @@ def _replace_once(source: str, old: str, new: str, description: str) -> str:
     return source.replace(old, new, 1)
 
 
+MOBILE_LAYOUT_CSS = """  @media (max-width: 640px) {
+    [role="group"][aria-label="Demo scenarios"] {
+      left: 12px !important; right: 12px !important; max-width: none !important;
+      transform: none !important; flex-wrap: nowrap !important;
+      justify-content: flex-start !important; overflow-x: auto; scrollbar-width: none;
+    }
+    [role="group"][aria-label="Demo scenarios"] > * { flex: 0 0 auto; }
+    [role="group"][aria-label="Demo scenarios"] > span:first-child { display: none; }
+    [role="group"][aria-label="Demo scenarios"] > button {
+      padding: 8px 10px !important; font-size: 0.72rem !important;
+    }
+    [aria-labelledby="lifecycle-heading"] ol { gap: 6px !important; }
+    [aria-labelledby="lifecycle-heading"] ol li > span {
+      font-size: 0.66rem !important; overflow-wrap: anywhere; hyphens: auto;
+    }
+  }
+"""
+
+# Presentation-only corrections for the generated document: language, title, and a
+# narrow-viewport layout so the fixed scenario bar and stage labels never cover or
+# overlap the outcome text. None of these touch data flow or verdict handling.
+PRESENTATION_FIXES = (
+    ("<html><head>", '<html lang="en"><head>', "document language attribute"),
+    (
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        "<title>CloseLoop demo</title>\n",
+        "document title",
+    ),
+    (
+        "  summary::-webkit-details-marker { display: none; }\n",
+        "  summary::-webkit-details-marker { display: none; }\n" + MOBILE_LAYOUT_CSS,
+        "mobile layout rules",
+    ),
+)
+
+
+def apply_presentation_fixes(template: str) -> str:
+    for old, new, description in PRESENTATION_FIXES:
+        template = _replace_once(template, old, new, description)
+    return template
+
+
 API_CLIENT = r'''const DEMO_API_PATH = "/demo/run";
 const RESULT_SCHEMA = "closeloop.public-demo-result/v1";
 const ALLOWED_SCENARIOS = new Set(["healthy", "false_success", "evidence_outage"]);
@@ -437,6 +480,8 @@ def integrate(source: str) -> str:
         "using a simulated subscription provider and the real server-side deterministic verifier.",
         "footer verifier disclosure",
     )
+
+    template = apply_presentation_fixes(template)
 
     for forbidden in ("function runProvider", "function verifyCancellation"):
         if forbidden in template:
