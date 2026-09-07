@@ -24,10 +24,10 @@ Labels describe evidence actually established; they are not interchangeable.
 
 ## Final evidence counts
 
-- Final server-backed demo package complete suite: **214 passed** (pre-integration deployment
-  baseline: 187; Milestone 7 baseline: 183).
-- Public demo API/browser/security: **27 passed**; existing MCP/demo cases: **12 passed**; combined
-  focused checkpoint: **39 passed**.
+- Final release-QA complete suite: **216 passed** (server-backed demo package: 214;
+  pre-integration deployment baseline: 187; Milestone 7 baseline: 183).
+- Public demo API/browser/security: **29 passed**; existing MCP/demo cases: **12 passed**; combined
+  focused checkpoint: **41 passed**.
 - Confirmation-attestation suite: **31 passed**.
 - General adversarial/security suite: **78 passed**.
 - AWS/lifecycle/verifier regression: **46 passed**.
