@@ -172,7 +172,7 @@ claims until the customer-visible outcome is independently observed.
 
 ## Testing and evidence summary
 
-- Complete release-QA suite: **216 passed** (server-backed demo package: 214; pre-integration deployment baseline: 187;
+- Complete release suite: **218 passed** (release QA: 216; server-backed demo package: 214; pre-integration deployment baseline: 187;
   Milestone 7 baseline: 183).
 - Focused confirmation-attestation: **31 passed**.
 - General adversarial/security: **78 passed**.
