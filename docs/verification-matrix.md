@@ -13,7 +13,7 @@ Labels describe evidence actually established; they are not interchangeable.
 | MCP protocol | **INTEGRATION VERIFIED** | Standard MCP Inspector plus tests cover Streamable HTTP, 2025-11-25/2025-03-26, strict calls, and safe errors | Inspector ran on an unsupported older Node patch with successful commands |
 | Alexa+ integration | **INTEGRATION VERIFIED** | Server implements documented self-hosted MCP contracts, schemas, protected-resource metadata, and conversational results | No Alexa AI CLI, add-on, Local Inspector, simulator, device, account link, or live client |
 | MCP Apps resource | **INTEGRATION VERIFIED** | Resource discovery/read, metadata linkage, MIME profile, AppBridge result delivery, and text fallback tested | Not rendered by an Alexa+ host; CDN runtime dependency remains |
-| Proof-card browser UI | **LOCAL UI/BROWSER VERIFIED** | Real lifecycle cards rendered for confirmation and all three outcomes locally; the polished public browser UI also rendered all three server-returned outcomes signed out at `https://closeloop-zeta.vercel.app/demo/` | Not rendered by an Alexa+ host; not a formal assistive-technology/WCAG audit |
+| Proof-card browser UI | **LOCAL UI/BROWSER VERIFIED** | Real lifecycle cards rendered for confirmation and all three outcomes locally; the polished public browser UI also rendered all three server-returned outcomes signed out at `https://closeloop-zeta.vercel.app/demo/`, in Chromium and in real WebKit (Playwright iPhone emulation with touch), including with `DecompressionStream` removed to model Safari 16.3 and earlier | Not rendered by an Alexa+ host; Linux WebKit is not a physical iOS device; not a formal assistive-technology/WCAG audit |
 | Adversarial/security | **PARTIALLY ADVERSARIAL VERIFIED** | 31 confirmation plus 78 general adversarial cases; seven blocking findings fixed; Governor final review | No formal penetration, load/DoS, live identity, live cloud, or network-partition testing |
 | Demo provider | **SIMULATED** | Deterministic healthy, false-success, and evidence-outage modes traverse the real adapter/lifecycle/verifier path | No real subscription account or third-party provider |
 | Public repository | **VERIFIED** | Anonymous GitHub and raw-content requests returned 200; GitHub detects Apache-2.0 and the public license matches canonical bytes | Submission video remains a separate manual publication step |
@@ -24,8 +24,10 @@ Labels describe evidence actually established; they are not interchangeable.
 
 ## Final evidence counts
 
-- Final release-QA complete suite: **216 passed** (server-backed demo package: 214;
-  pre-integration deployment baseline: 187; Milestone 7 baseline: 183).
+- Final release complete suite: **218 passed** (release QA: 216; server-backed demo package: 214;
+  pre-integration deployment baseline: 187; Milestone 7 baseline: 183). Two of the 218 are the
+  Safari hotfix regressions: a static bundle check and a real-browser Playwright interaction test
+  that runs with `DecompressionStream` removed (skipped where Node/Playwright are absent).
 - Public demo API/browser/security: **29 passed**; existing MCP/demo cases: **12 passed**; combined
   focused checkpoint: **41 passed**.
 - Confirmation-attestation suite: **31 passed**.

@@ -24,6 +24,45 @@ of a browser button, human identity or intent, or a production trusted confirmat
 execution, live Alexa+, live AWS, production OAuth/account linking, and Alexa+ host proof-card
 rendering remain unverified.
 
+## Production hotfix: demo controls dead on Safari without DecompressionStream
+
+- Report: on a real iPhone the public demo rendered but its buttons did nothing. Frozen main was
+  `7fff225a`.
+- Reproduction: real WebKit 26 (Playwright, iPhone 14 emulation with touch) against production
+  worked with the API present, so the failure was not engine-wide. With `window.DecompressionStream`
+  removed before page scripts ran, production reproduced the report exactly: raw `{{ }}`
+  placeholders visible, `<x-dc>` never hidden, no scenario buttons, a Confirm button with no React
+  `onClick`, and the loader banner `SyntaxError: Invalid character U+001F` (the gzip magic byte)
+  from the runtime blob.
+- Root cause: the Claude Design bundle stored its dc-runtime, React, and ReactDOM manifest entries
+  gzip-compressed and inflated them in the browser with `DecompressionStream`, which Safari gained
+  only in 16.4 (iOS 16.4). On older Safari the loader merely warned and handed gzip bytes to
+  `<script>`, so the runtime never booted and the static template rendered without handlers. The
+  runtime's syntax floor is otherwise ES2020/ES2022 (Safari 14.1 and later), so this API was the
+  binding constraint.
+- Why earlier QA missed it: mobile checks ran in Chromium and Linux WebKit 26 emulation, both of
+  which have `DecompressionStream`; no environment lacked the API.
+- Fix (`3a1bbd5`): `inflate_bundled_scripts()` in `scripts/integrate_claude_demo.py` stores the three
+  JavaScript manifest entries uncompressed (fonts already were), so no manifest entry is compressed
+  and the decompression path is never taken. Applied to the served bundle; decoded payloads are
+  byte-identical and nothing outside the manifest changed. Vercel serves the page brotli-compressed,
+  so transfer size is essentially unchanged. No template, verdict, confirmation, authorization, MCP,
+  or CORS behavior changed.
+- Tests: `test_polished_browser_bundle_stores_scripts_uncompressed_for_older_safari` (static) and
+  `tests/test_browser_demo_interaction.py` driving `tests/browser_demo_interaction.mjs` in a real
+  browser with `DecompressionStream` stripped: scenario selection, Confirm firing, exactly one
+  scenario-only `POST /demo/run` per run, Verified / Not completed / Awaiting proof from server
+  data, `Proof unavailable` on backend failure and on a contract-violating tampered result, Restart,
+  provenance disclosure, and no browser-side verdict logic. Skips without Node/Playwright;
+  `CLOSELOOP_BROWSER_ENGINES=chromium,webkit` adds WebKit. Complete suite: `218 passed`.
+- Preview evidence (Vercel preview of `3a1bbd5`, real WebKit 26.5, iPhone emulation,
+  `DecompressionStream` removed): no raw template, no loader error, every control had a live
+  `onClick` and was the element under its own center point, healthy `PASS -> Verified`,
+  false_success `FAIL -> Not completed` with `Success claimed` beside `Auto-renew Enabled`,
+  evidence_outage `INCONCLUSIVE -> Awaiting proof`, aborted backend `Proof unavailable`. The only
+  page errors were `navigator.storage.persisted` rejections from Vercel's preview-only toolbar.
+- Production evidence is recorded below once the merge deploys.
+
 ## Final release QA
 
 - Ran from clean `8dead4a` (the commit Vercel production serves) on branch

@@ -116,8 +116,8 @@ a bearer-token issuer, and a separate trusted confirmation authority. Missing pr
 authentication, or confirmation configuration fails closed. Never deploy the test or recording
 signing keys.
 
-The final release-QA package has **216 passing tests** (server-backed demo package: 214;
-pre-integration deployment baseline: 187). Security is
+The final release package has **218 passing tests** (release QA: 216; server-backed demo package:
+214; pre-integration deployment baseline: 187). Security is
 **PARTIALLY ADVERSARIAL VERIFIED**:
 109 focused adversarial/confirmation cases cover verdict manipulation, authorization isolation,
 confirmation replay and tampering, lifecycle races, forged evidence, MCP abuse, UI injection,
