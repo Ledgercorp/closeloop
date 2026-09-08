@@ -7,6 +7,8 @@ the demo data source, safe error state, and disclosure wording.
 from __future__ import annotations
 
 import argparse
+import base64
+import gzip
 import json
 import re
 from pathlib import Path
@@ -16,6 +18,34 @@ def _replace_once(source: str, old: str, new: str, description: str) -> str:
     if source.count(old) != 1:
         raise ValueError(f"expected one {description}, found {source.count(old)}")
     return source.replace(old, new, 1)
+
+
+def inflate_bundled_scripts(source: str) -> str:
+    """Store bundled JavaScript uncompressed so the loader never needs DecompressionStream.
+
+    The Claude bundle gzip-compresses its runtime, React, and ReactDOM manifest entries and
+    inflates them in the browser with ``DecompressionStream``. Safari before 16.4 (iOS 16.3 and
+    earlier) lacks that API; the loader then hands gzip bytes to ``<script>``, the runtime never
+    boots, and the raw template renders with controls that have no handlers. Fonts are already
+    stored raw, so after this step no manifest entry is compressed.
+    """
+
+    match = re.search(
+        r'(<script type="__bundler/manifest">\s*)(.*?)(\s*</script>)',
+        source,
+        flags=re.DOTALL,
+    )
+    if match is None:
+        raise ValueError("Claude bundle manifest was not found")
+    manifest = json.loads(match.group(2))
+    for entry in manifest.values():
+        if not entry.get("compressed"):
+            continue
+        raw = gzip.decompress(base64.b64decode(entry["data"]))
+        entry["data"] = base64.b64encode(raw).decode("ascii")
+        entry["compressed"] = False
+    encoded = json.dumps(manifest, separators=(",", ":"))
+    return source[: match.start(2)] + encoded + source[match.end(2) :]
 
 
 MOBILE_LAYOUT_CSS = """  @media (max-width: 640px) {
@@ -491,6 +521,7 @@ def integrate(source: str) -> str:
 
     encoded_template = json.dumps(template, ensure_ascii=True).replace("<", "\\u003c")
     integrated = source[: match.start(2)] + encoded_template + source[match.end(2) :]
+    integrated = inflate_bundled_scripts(integrated)
     return "\n".join(line.rstrip() for line in integrated.splitlines()) + "\n"
 
 

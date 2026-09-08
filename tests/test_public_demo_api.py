@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
 from pathlib import Path
@@ -343,6 +344,30 @@ def test_polished_browser_bundle_has_title_language_and_mobile_layout_rules():
     assert "@media (max-width: 640px)" in template
     assert '[role="group"][aria-label="Demo scenarios"]' in template
     assert '[aria-labelledby="lifecycle-heading"] ol' in template
+
+
+def test_polished_browser_bundle_stores_scripts_uncompressed_for_older_safari():
+    """Safari before 16.4 lacks DecompressionStream; the bundle must not depend on it."""
+
+    bundle = (
+        Path(__file__).parents[1] / "src" / "closeloop" / "public_demo" / "index.html"
+    ).read_text(encoding="utf-8")
+    match = re.search(
+        r'<script type="__bundler/manifest">\s*(.*?)\s*</script>', bundle, re.DOTALL
+    )
+    assert match is not None
+    manifest = json.loads(match.group(1))
+
+    assert all(entry["compressed"] is False for entry in manifest.values())
+    scripts = [entry for entry in manifest.values() if entry["mime"] == "text/javascript"]
+    assert len(scripts) == 3
+    heads = set()
+    for entry in scripts:
+        raw = base64.b64decode(entry["data"])
+        assert raw[:2] != b"\x1f\x8b"
+        heads.add(raw.decode("utf-8")[:40])
+    assert any("dc-runtime" in head for head in heads)
+    assert sum("@license React" in head for head in heads) == 2
 
 
 def test_polished_browser_bundle_only_requests_scenario_and_has_no_verifier_logic():
