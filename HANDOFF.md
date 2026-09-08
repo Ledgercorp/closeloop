@@ -61,7 +61,21 @@ rendering remain unverified.
   false_success `FAIL -> Not completed` with `Success claimed` beside `Auto-renew Enabled`,
   evidence_outage `INCONCLUSIVE -> Awaiting proof`, aborted backend `Proof unavailable`. The only
   page errors were `navigator.storage.persisted` rejections from Vercel's preview-only toolbar.
-- Production evidence is recorded below once the merge deploys.
+- Production evidence: PR #2 merged as `b8018fa`; Vercel production deployment
+  `dpl_66YSFH5RKfgNxhjtw2fV4nnVnV45` reached READY and serves `https://closeloop-zeta.vercel.app`
+  with zero compressed manifest entries. Signed out from an external network: `/` 200, `/health`
+  200, `/demo` 308 to `/demo/`, `/demo/` 200 (749 KB identity, 408 KB brotli on the wire), all three
+  `POST /demo/run` scenarios server-generated with the expected verdict tuples and non-live
+  disclosures, extra verdict field 422, unknown scenario 422, cross-origin 403, `/mcp` 401 on GET
+  and unauthenticated initialize without a challenge header, no secrets or local paths in the
+  served bundle. Real WebKit 26.5 (Playwright iPhone 14 emulation, touch), run twice against
+  production, once with `DecompressionStream` removed and once with it present: no raw template,
+  no loader error, every control had a live `onClick` and was the element under its own center
+  point, each run sent exactly one `{"scenario": ...}` POST, healthy `PASS -> Verified`,
+  false_success `FAIL -> Not completed` with `Success claimed` beside `Auto-renew Enabled`,
+  evidence_outage `INCONCLUSIVE -> Awaiting proof`, aborted backend `Proof unavailable`, provenance
+  and Restart worked, and there were no console errors or unhandled rejections. Linux WebKit is
+  the strongest Safari engine available here; no physical iOS device was used.
 
 ## Final release QA
 
