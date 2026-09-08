@@ -24,6 +24,35 @@ of a browser button, human identity or intent, or a production trusted confirmat
 execution, live Alexa+, live AWS, production OAuth/account linking, and Alexa+ host proof-card
 rendering remain unverified.
 
+## Mobile UX hotfix: scenario selection returns to the confirmation card
+
+- Reported from a physical iPhone recording after the DecompressionStream hotfix: taps were
+  registering (selectors changed state, Confirm ran), but scenario selection and Restart reset
+  state while preserving the scroll position. On the long phone page a user reading the lower
+  sections stayed there, so the controls looked dead.
+- Fix (`fcaea06`, merged as `5c36387`): `reset()`, used by Verified path, False success, Evidence
+  outage, and Restart, now calls `focusInteractiveSection()`. On the next animation frame it
+  scrolls the rendered Resolution Lifecycle card into view with `scrollIntoView({ block: "start" })`,
+  or the confirmation panel itself when the Confirm button would not fit below the card on that
+  viewport, measured from the live layout and the sticky bar's own height with no hard-coded pixel
+  offsets. `prefers-reduced-motion: reduce` selects immediate instead of smooth scrolling. Applied
+  in `scripts/integrate_claude_demo.py` and the served bundle. Scenario semantics, Confirm-before-
+  execution, server-side verdict authority, the scenario-only `POST /demo/run`, `/mcp`
+  authentication, CORS, visual design, and the sticky bar are unchanged.
+- Tests: the real-browser regression scrolls to the bottom, taps each scenario, and asserts
+  selection plus the confirmation heading and Confirm button inside the viewport; after a terminal
+  run it scrolls down, taps Restart under reduced motion, and asserts a clean confirmation state in
+  view with no stale result. Full suite: 218 passed.
+- Production evidence: Vercel `dpl_7qzhdU8867s5w6yQZKCY2hU124AA` READY for `5c36387`. The
+  repository's browser regression ran in real WebKit 26.5 (iPhone 14 emulation, touch) against
+  `https://closeloop-zeta.vercel.app`, once with `DecompressionStream` removed and once with it
+  present: all three scroll-from-bottom checks passed (selected, confirmation heading and Confirm
+  inside the viewport), Restart from the bottom returned a clean confirmation state in view, the
+  three outcomes rendered `Verified`, `Not completed`, and `Awaiting proof` from server data,
+  aborted and tampered responses rendered `Proof unavailable`, each run sent exactly one
+  `{"scenario": ...}` POST, and there were no failures. No physical iOS device was used here; the
+  reporter's recording is the physical-device evidence.
+
 ## Production hotfix: demo controls dead on Safari without DecompressionStream
 
 - Report: on a real iPhone the public demo rendered but its buttons did nothing. Frozen main was
