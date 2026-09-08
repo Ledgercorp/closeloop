@@ -59,6 +59,7 @@ const statusHeading = () => page.locator('section[aria-labelledby="lifecycle-hea
 const confirmButton = () => page.getByRole('button', { name: 'Confirm demo cancellation' });
 const scenarioButton = (label) => page.getByRole('button', { name: label, exact: true });
 const outcomes = [];
+let scrollChecks = [];
 
 async function runScenario(label, scenario) {
   const before = posts.length;
@@ -92,6 +93,26 @@ try {
   check((await page.evaluate(() => typeof verifyCancellation === 'undefined' && typeof runProvider === 'undefined')), 'browser-side verdict logic is present');
   check((await statusHeading().count()) === 0, 'a terminal outcome is shown before confirmation');
 
+  // Scenario selection from far down the page must bring the confirmation card back into view.
+  const lifecycle = () => page.locator('section[aria-labelledby="lifecycle-heading"]').last();
+  const inViewport = async (loc) => loc.evaluate((el) => { const r = el.getBoundingClientRect(); return r.top < window.innerHeight && r.bottom > 0; });
+  scrollChecks = [];
+  for (const label of ['False success', 'Evidence outage', 'Verified path']) {
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(150);
+    const startY = await page.evaluate(() => window.scrollY);
+    await scenarioButton(label).tap();
+    const selected = (await scenarioButton(label).getAttribute('aria-pressed')) === 'true';
+    let settled = false;
+    try { await page.waitForFunction(() => { const button = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Confirm demo cancellation' && !b.closest('x-dc')); const r = button?.getBoundingClientRect(); return r && r.top >= 0 && r.bottom <= window.innerHeight; }, null, { timeout: 5000 }); settled = true; } catch { /* reported below */ }
+    const confirmVisible = settled && await confirmButton().evaluate((el) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; }) && await inViewport(lifecycle());
+    const confirmTextVisible = await page.getByText('Confirmation required before anything runs').isVisible();
+    scrollChecks.push({ label, startedFarDown: startY > 400, selected, sectionInView: settled, confirmVisible, confirmTextVisible });
+    check(startY > 400, `${label}: test did not start far down the page`);
+    check(selected, `${label}: not selected after tap from bottom`);
+    check(settled && confirmVisible && confirmTextVisible, `${label}: confirmation card not brought into view after selection`);
+  }
+
   const healthy = await runScenario('Verified path', 'healthy');
   check(healthy.status === 'Verified' && healthy.chip === 'PASS', `healthy rendered ${healthy.status}/${healthy.chip}`);
   const falseSuccess = await runScenario('False success', 'false_success');
@@ -115,8 +136,17 @@ try {
   check(tampered.status === 'Proof unavailable', `tampered result rendered ${tampered.status}`);
   await page.unroute('**/demo/run');
 
+  // Restart from far down the page after a terminal result, on the reduced-motion (immediate) path.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(150);
   await page.getByRole('button', { name: 'Restart', exact: true }).tap();
+  await page.waitForTimeout(150);
+  check((await statusHeading().count()) === 0, 'Restart left a stale terminal result');
+  check(await inViewport(lifecycle()) && await confirmButton().evaluate((el) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; }), 'Restart did not bring the confirmation card into view');
   check(await page.getByText('Confirmation required before anything runs').isVisible(), 'Restart did not return to the confirmation state');
+  scrollChecks.push({ label: 'Restart', restartInView: await inViewport(lifecycle()), staleResult: (await statusHeading().count()) !== 0 });
+  await page.emulateMedia({ reducedMotion: null });
   await page.locator('summary').first().scrollIntoViewIfNeeded();
   await page.locator('summary').first().tap();
   check(await page.locator('details').evaluate((d) => d.open), 'provenance disclosure did not open');
@@ -132,5 +162,5 @@ try {
   await browser.close();
 }
 
-console.log(JSON.stringify({ engine: engineName, noDecompressionStream, posts, outcomes, failures }));
+console.log(JSON.stringify({ engine: engineName, noDecompressionStream, posts, outcomes, scrollChecks, failures }));
 process.exit(failures.length === 0 ? 0 : 1);

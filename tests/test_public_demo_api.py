@@ -344,6 +344,10 @@ def test_polished_browser_bundle_has_title_language_and_mobile_layout_rules():
     assert "@media (max-width: 640px)" in template
     assert '[role="group"][aria-label="Demo scenarios"]' in template
     assert '[aria-labelledby="lifecycle-heading"] ol' in template
+    # Scenario selection and Restart must bring the confirmation card back into view.
+    assert "this.focusInteractiveSection();" in template
+    assert "prefers-reduced-motion: reduce" in template
+    assert 'scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" })' in template
 
 
 def test_polished_browser_bundle_stores_scripts_uncompressed_for_older_safari():
