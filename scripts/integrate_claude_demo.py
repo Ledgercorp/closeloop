@@ -66,6 +66,47 @@ MOBILE_LAYOUT_CSS = """  @media (max-width: 640px) {
   }
 """
 
+# Scenario selection and Restart reset state without moving the viewport. On a phone the
+# page is long, so a user who taps a scenario while reading the lower sections keeps
+# looking at them and the controls appear dead. After the existing reset, bring the
+# rendered Resolution Lifecycle card (confirmation state) back into view. Nothing runs
+# until Confirm is pressed, and no verdict logic is involved.
+RESET_WITHOUT_SCROLL = """      receipt: null, evidence: null, result: null, error: null, resultIn: false
+    });
+  }
+"""
+RESET_WITH_SCROLL = """      receipt: null, evidence: null, result: null, error: null, resultIn: false
+    });
+    this.focusInteractiveSection();
+  }
+
+  focusInteractiveSection() {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+    const schedule = typeof window.requestAnimationFrame === "function"
+      ? window.requestAnimationFrame.bind(window)
+      : (fn) => setTimeout(fn, 0);
+    schedule(() => {
+      const live = (selector) => Array.from(document.querySelectorAll(selector))
+        .find((el) => !el.closest("x-dc") && el.getClientRects().length > 0);
+      const section = live('section[aria-labelledby="lifecycle-heading"]');
+      if (!section || typeof section.scrollIntoView !== "function") return;
+      const heading = Array.from(section.querySelectorAll("h3"))
+        .find((h) => /^Confirmation required/.test(h.textContent || ""));
+      const panel = heading ? heading.parentElement : null;
+      const button = panel ? panel.querySelector("button") : null;
+      const bar = live('[role="group"][aria-label="Demo scenarios"]');
+      const reserved = bar ? bar.getBoundingClientRect().height + 24 : 0;
+      const sectionTop = section.getBoundingClientRect().top;
+      const confirmFits = !button ||
+        button.getBoundingClientRect().bottom - sectionTop <= window.innerHeight - reserved;
+      const target = confirmFits || !panel ? section : panel;
+      const reduceMotion = typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    });
+  }
+"""
+
 # Presentation-only corrections for the generated document: language, title, and a
 # narrow-viewport layout so the fixed scenario bar and stage labels never cover or
 # overlap the outcome text. None of these touch data flow or verdict handling.
@@ -81,6 +122,11 @@ PRESENTATION_FIXES = (
         "  summary::-webkit-details-marker { display: none; }\n",
         "  summary::-webkit-details-marker { display: none; }\n" + MOBILE_LAYOUT_CSS,
         "mobile layout rules",
+    ),
+    (
+        RESET_WITHOUT_SCROLL,
+        RESET_WITH_SCROLL,
+        "scenario/restart return to the interactive section",
     ),
 )
 

@@ -103,6 +103,18 @@ def test_public_demo_controls_work_without_decompression_stream(engine, tmp_path
         '{"scenario":"false_success"}',
     ]
     assert all(post["method"] == "POST" for post in report["posts"])
+    assert [c["label"] for c in report["scrollChecks"]] == [
+        "False success",
+        "Evidence outage",
+        "Verified path",
+        "Restart",
+    ]
+    for scroll_check in report["scrollChecks"][:3]:
+        assert scroll_check["startedFarDown"] and scroll_check["selected"]
+        assert scroll_check["sectionInView"] and scroll_check["confirmVisible"]
+        assert scroll_check["confirmTextVisible"]
+    assert report["scrollChecks"][3]["restartInView"] is True
+    assert report["scrollChecks"][3]["staleResult"] is False
     assert [(o["scenario"], o["status"], o["chip"]) for o in report["outcomes"]] == [
         ("healthy", "Verified", "PASS"),
         ("false_success", "Not completed", "FAIL"),
