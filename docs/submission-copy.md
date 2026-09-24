@@ -136,20 +136,18 @@ claims until the customer-visible outcome is independently observed.
 
 ## Testing and evidence summary
 
-- Complete server-backed demo suite: **214 passed** (pre-integration deployment baseline: 187;
-  Milestone 7 baseline: 183).
+- Reconciled complete suite: **235 passed, 0 failed, 1 skipped** (236 collected). The browser regression was skipped because Playwright is unavailable in this environment; the prior release QA baseline was 218 passed.
 - Focused confirmation-attestation: **31 passed**.
 - General adversarial/security: **78 passed**.
 - AWS/lifecycle/verifier: **46 passed**.
 - Alexa+/MCP: **12 passed**.
 - Proof-card/UI: **16 passed**.
 - Canonical demo: PASS → Verified; FAIL → Not completed; INCONCLUSIVE → Awaiting proof.
-- Browser: **LOCAL UI/BROWSER VERIFIED**; the public demo is **END-TO-END VERIFIED** against the
+- Browser: **LOCAL UI/BROWSER VERIFIED** for the persistent-resolution flow. Historical public browser verification covers the prior release only; it does not verify the current page.
   deployed isolated server lifecycle/verifier.
 - Alexa+: **INTEGRATION VERIFIED locally; live NOT VERIFIED**.
 - AWS: **SIMULATED; live NOT VERIFIED**.
-- Public deployment: **VERIFIED** for the signed-out isolated deterministic judge demo; live
-  provider/auth/storage execution is not deployed.
+- Public deployment: **NOT VERIFIED** for the persistent-resolution build. Historical signed-out evidence applies to the prior release only.
 
 ## Submission links
 

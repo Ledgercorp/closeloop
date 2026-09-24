@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
+import gzip
 import json
+import re
 from pathlib import Path
 from threading import Event, Thread
 
@@ -14,6 +17,11 @@ from closeloop.auth import HmacJwtTokenVerifier, REQUIRED_SCOPE
 from closeloop.demo_provider import DemoProvider
 from closeloop.http_app import create_app
 from closeloop.public_demo_api import PublicDemoRunner
+from scripts.integrate_claude_demo import (
+    RESET_WITHOUT_SCROLL,
+    apply_presentation_fixes,
+    inflate_bundled_scripts,
+)
 
 
 ISSUER = "https://issuer.public-demo.test"
@@ -381,6 +389,67 @@ def test_public_demo_timeout_and_saturation_fail_closed_without_queueing():
     assert len(responses) == 1
     assert responses[0].status_code == 503
     assert "Verified" not in responses[0].text
+
+
+def test_public_demo_path_without_trailing_slash_redirects_to_bundle():
+    with make_client() as client:
+        response = client.get("/demo", follow_redirects=False)
+
+    assert response.status_code == 308
+    assert response.headers["location"] == "/demo/"
+
+
+def test_primary_resolution_demo_has_consumer_flows_and_discloses_simulation():
+    page = (
+        Path(__file__).parents[1] / "src" / "closeloop" / "public_demo" / "resolution.html"
+    ).read_text(encoding="utf-8")
+
+    assert "Alexa, cancel StreamBox before Friday" in page
+    assert 'id="run"' in page
+    assert 'id="failure"' in page
+    assert 'id="outage"' in page
+    assert 'id="proof"' in page
+    assert "Local simulation" in page
+    assert "DecompressionStream" not in page
+
+
+def test_legacy_bundle_helpers_keep_safari_and_mobile_hotfixes():
+    raw_script = b"window.closeLoopDemo = true;"
+    compressed = gzip.compress(raw_script)
+    manifest = {
+        "runtime.js": {
+            "mime": "text/javascript",
+            "compressed": True,
+            "data": base64.b64encode(compressed).decode("ascii"),
+        }
+    }
+    source = (
+        '<script type="__bundler/manifest">'
+        + json.dumps(manifest)
+        + "</script>"
+    )
+
+    unpacked = inflate_bundled_scripts(source)
+    manifest_json = unpacked.split(
+        '<script type="__bundler/manifest">', 1
+    )[1].split("</script>", 1)[0]
+    entry = json.loads(manifest_json)["runtime.js"]
+    assert entry["compressed"] is False
+    assert base64.b64decode(entry["data"]) == raw_script
+    assert inflate_bundled_scripts(unpacked) == unpacked
+
+    template = (
+        "<html><head>\n"
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        "  summary::-webkit-details-marker { display: none; }\n"
+        + RESET_WITHOUT_SCROLL
+    )
+    polished = apply_presentation_fixes(template)
+    assert '<html lang="en"><head>' in polished
+    assert "<title>CloseLoop demo</title>" in polished
+    assert "@media (max-width: 640px)" in polished
+    assert "prefers-reduced-motion: reduce" in polished
+    assert "this.focusInteractiveSection();" in polished
 
 
 def test_polished_browser_bundle_only_requests_scenario_and_has_no_verifier_logic():

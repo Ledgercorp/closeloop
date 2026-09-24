@@ -16,23 +16,21 @@
 
 ## Video recording checklist
 
-- [ ] After the revised demo is redeployed and rechecked, open `https://closeloop-zeta.vercel.app/demo/` in a fresh signed-out browser. The currently listed deployment has not been updated for this evolution.
-- [ ] Confirm the polished UI identifies the simulated provider and non-live Alexa+/AWS boundaries.
-- [ ] Record the canonical request: “Alexa, cancel StreamBox before Friday and make sure it actually happens.”
-- [ ] Show the initial **Waiting for your confirmation** state and that no cancellation request has been sent.
-- [ ] Select **Confirm and play the resolution**; show healthy **PASS → Verified** and expand execution/read-back/verifier provenance.
-- [ ] Show false-success as open **INCONCLUSIVE → Awaiting proof**: provider accepted, auto-renew is still on, and the simulated next-check time is visible.
-- [ ] Show outage **INCONCLUSIVE → Awaiting proof**.
-- [ ] Show the implemented architecture and verification matrix briefly.
-- [ ] Keep runtime below 180 seconds; target 2:50–2:55.
-- [ ] Use English; remove notifications, personal data, tokens, local paths, and private tabs.
-- [ ] Use no unauthorized music, footage, logos, or other copyrighted/trademarked assets.
-- [ ] Export at a legible resolution and review the complete final file once.
-- [ ] Upload publicly to YouTube or Vimeo and verify playback in a signed-out browser.
+- [ ] After deployment, open the persistent-resolution demo in a fresh signed-out browser and record the deployed commit.
+- [ ] Identify the provider and time progression as simulations; do not imply live Alexa+, AWS, or an automatic production scheduler.
+- [ ] Show the StreamBox request and waiting-confirmation state before any action.
+- [ ] Confirm once; show provider acceptance with auto-renew still on and the same resolution remaining open.
+- [ ] Return in a later session, recheck the same resolution, and show Verified with final evidence.
+- [ ] Show evidence-supported Not completed and explain that independent final evidence establishes failure.
+- [ ] Show the evidence-outage path remaining Awaiting proof.
+- [ ] Expand evidence/provenance and keep the demo under three minutes.
+- [ ] Use English and remove notifications, personal data, tokens, local paths, and private tabs.
+- [ ] Do not include unauthorized music, footage, logos, or other copyrighted/trademarked assets.
+- [ ] Review the exported file, upload it publicly, and verify playback signed out.
 
 ## Exact submission screenshots
 
-Capture these only after the revised demo has been redeployed and checked signed out; the current hosted deployment does not include this evolution. Use the local demo until then:
+Capture only after signed-out production checks verify the persistent-resolution release; a successful deployment status alone is insufficient. Until then, use the local simulation and label it accordingly:
 
 1. **Hero / confirmation:** initial state shows **Waiting for your confirmation** and that no cancellation request has been sent.
 2. **Primary result:** select **Confirm and play the resolution** and capture **Verified** plus the completed lifecycle.

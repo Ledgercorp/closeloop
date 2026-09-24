@@ -84,8 +84,7 @@ a bearer-token issuer, and a separate trusted confirmation authority. Missing pr
 authentication, or confirmation configuration fails closed. Never deploy the test or recording
 signing keys.
 
-The final server-backed demo package has **214 passing tests** (the pre-integration deployment
-baseline was 187). Security is
+The reconciled suite has **235 passed, 0 failed, 1 skipped** (236 collected); its browser interaction regression was skipped because Playwright is unavailable here. Security is
 **PARTIALLY ADVERSARIAL VERIFIED**:
 109 focused adversarial/confirmation cases cover verdict manipulation, authorization isolation,
 confirmation replay and tampering, lifecycle races, forged evidence, MCP abuse, UI injection,
@@ -104,13 +103,7 @@ information leakage, and failure behavior. Seven blocking findings were fixed. S
 - [Build provenance](docs/build-provenance.md)
 - [Trust model](docs/trust-model.md)
 
-The repository and deterministic judge demo are publicly reachable. The canonical Vercel URL serves
-`/`, `/health`, and `/demo/` without authentication; `/mcp` remains fail-closed behind bearer
-authentication. `/demo/run` is an anonymous, isolated simulation surface—not a production action
-API. Its concurrency admission is per Vercel process/instance, not distributed abuse prevention;
-its Origin check blocks ordinary cross-origin browsers but is not authentication and does not stop
-non-browser clients. No production storage, OAuth, confirmation-authority secret, test signer, live
-provider, live Alexa+, or live AWS configuration is exposed.
+The canonical Vercel URL had signed-out checks on a previous release; those results predate persistent resolutions and do not verify the current build. No production behavior check has been run against the persistent-resolution release. Locally, /demo/ is the persistent resolution simulation and /demo/run accepts only a bounded scenario selector. The production MCP endpoint remains bearer-authenticated. The demo uses isolated temporary state and a simulated provider; no live Alexa+, provider, AWS, production storage, OAuth, confirmation authority, or scheduler is claimed.
 
 ## Provenance and license
 

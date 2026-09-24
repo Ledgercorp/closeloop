@@ -1,6 +1,10 @@
 # CloseLoop Handoff
 
-## Current phase
+> Historical release QA below describes the pre-persistent-resolution demo through commit
+> 33a50265223fb24d29187aa5a3c4b0f284b9483a. It does not establish that the persistent-resolution
+> build from 1ae90d5a77a2e0dff6a8488b2f52ca212b807c1d is deployed or production-verified.
+
+## Historical release QA baseline (2026-09-08)
 
 Milestone 8, the public deployment fix, and the final polished-demo integration are complete. The
 Claude-designed UI at `https://closeloop-zeta.vercel.app/demo/` now sends only an allowlisted scenario
@@ -15,14 +19,129 @@ deployed server responses. The false-success response proved a provider success 
 independent `auto_renew: true` read-back produced server verifier `FAIL`. Extra verdict input was
 rejected with 422, cross-origin browser input with 403, and unauthenticated `/mcp` remained 401.
 
-The final suite passes **214 tests**; focused public-demo API/browser/security plus MCP/demo tests pass
-`39`. The Development Governor's corrected HIGH-risk final review reported no BLOCKING/HIGH finding.
+The final release-QA suite passes **216 tests** (server-backed demo package: 214); focused public-demo
+API/browser/security plus MCP/demo tests pass `41`. The Development Governor's corrected HIGH-risk final review reported no BLOCKING/HIGH finding.
 The public route cannot select a provider, access production resolutions, consume production
 confirmation, or receive client-supplied verdict/evidence. Its ephemeral confirmation proves only
 that the isolated route authorized this simulated run in response to a request; it is not evidence
 of a browser button, human identity or intent, or a production trusted confirmation. Live provider
 execution, live Alexa+, live AWS, production OAuth/account linking, and Alexa+ host proof-card
 rendering remain unverified.
+
+## Mobile UX hotfix: scenario selection returns to the confirmation card
+
+- Reported from a physical iPhone recording after the DecompressionStream hotfix: taps were
+  registering (selectors changed state, Confirm ran), but scenario selection and Restart reset
+  state while preserving the scroll position. On the long phone page a user reading the lower
+  sections stayed there, so the controls looked dead.
+- Fix (`fcaea06`, merged as `5c36387`): `reset()`, used by Verified path, False success, Evidence
+  outage, and Restart, now calls `focusInteractiveSection()`. On the next animation frame it
+  scrolls the rendered Resolution Lifecycle card into view with `scrollIntoView({ block: "start" })`,
+  or the confirmation panel itself when the Confirm button would not fit below the card on that
+  viewport, measured from the live layout and the sticky bar's own height with no hard-coded pixel
+  offsets. `prefers-reduced-motion: reduce` selects immediate instead of smooth scrolling. Applied
+  in `scripts/integrate_claude_demo.py` and the served bundle. Scenario semantics, Confirm-before-
+  execution, server-side verdict authority, the scenario-only `POST /demo/run`, `/mcp`
+  authentication, CORS, visual design, and the sticky bar are unchanged.
+- Tests: the real-browser regression scrolls to the bottom, taps each scenario, and asserts
+  selection plus the confirmation heading and Confirm button inside the viewport; after a terminal
+  run it scrolls down, taps Restart under reduced motion, and asserts a clean confirmation state in
+  view with no stale result. Full suite: 218 passed.
+- Production evidence: Vercel `dpl_7qzhdU8867s5w6yQZKCY2hU124AA` READY for `5c36387`. The
+  repository's browser regression ran in real WebKit 26.5 (iPhone 14 emulation, touch) against
+  `https://closeloop-zeta.vercel.app`, once with `DecompressionStream` removed and once with it
+  present: all three scroll-from-bottom checks passed (selected, confirmation heading and Confirm
+  inside the viewport), Restart from the bottom returned a clean confirmation state in view, the
+  three outcomes rendered `Verified`, `Not completed`, and `Awaiting proof` from server data,
+  aborted and tampered responses rendered `Proof unavailable`, each run sent exactly one
+  `{"scenario": ...}` POST, and there were no failures. No physical iOS device was used here; the
+  reporter's recording is the physical-device evidence.
+
+## Production hotfix: demo controls dead on Safari without DecompressionStream
+
+- Report: on a real iPhone the public demo rendered but its buttons did nothing. Frozen main was
+  `7fff225a`.
+- Reproduction: real WebKit 26 (Playwright, iPhone 14 emulation with touch) against production
+  worked with the API present, so the failure was not engine-wide. With `window.DecompressionStream`
+  removed before page scripts ran, production reproduced the report exactly: raw `{{ }}`
+  placeholders visible, `<x-dc>` never hidden, no scenario buttons, a Confirm button with no React
+  `onClick`, and the loader banner `SyntaxError: Invalid character U+001F` (the gzip magic byte)
+  from the runtime blob.
+- Root cause: the Claude Design bundle stored its dc-runtime, React, and ReactDOM manifest entries
+  gzip-compressed and inflated them in the browser with `DecompressionStream`, which Safari gained
+  only in 16.4 (iOS 16.4). On older Safari the loader merely warned and handed gzip bytes to
+  `<script>`, so the runtime never booted and the static template rendered without handlers. The
+  runtime's syntax floor is otherwise ES2020/ES2022 (Safari 14.1 and later), so this API was the
+  binding constraint.
+- Why earlier QA missed it: mobile checks ran in Chromium and Linux WebKit 26 emulation, both of
+  which have `DecompressionStream`; no environment lacked the API.
+- Fix (`3a1bbd5`): `inflate_bundled_scripts()` in `scripts/integrate_claude_demo.py` stores the three
+  JavaScript manifest entries uncompressed (fonts already were), so no manifest entry is compressed
+  and the decompression path is never taken. Applied to the served bundle; decoded payloads are
+  byte-identical and nothing outside the manifest changed. Vercel serves the page brotli-compressed,
+  so transfer size is essentially unchanged. No template, verdict, confirmation, authorization, MCP,
+  or CORS behavior changed.
+- Tests: `test_polished_browser_bundle_stores_scripts_uncompressed_for_older_safari` (static) and
+  `tests/test_browser_demo_interaction.py` driving `tests/browser_demo_interaction.mjs` in a real
+  browser with `DecompressionStream` stripped: scenario selection, Confirm firing, exactly one
+  scenario-only `POST /demo/run` per run, Verified / Not completed / Awaiting proof from server
+  data, `Proof unavailable` on backend failure and on a contract-violating tampered result, Restart,
+  provenance disclosure, and no browser-side verdict logic. Skips without Node/Playwright;
+  `CLOSELOOP_BROWSER_ENGINES=chromium,webkit` adds WebKit. Complete suite: `218 passed`.
+- Preview evidence (Vercel preview of `3a1bbd5`, real WebKit 26.5, iPhone emulation,
+  `DecompressionStream` removed): no raw template, no loader error, every control had a live
+  `onClick` and was the element under its own center point, healthy `PASS -> Verified`,
+  false_success `FAIL -> Not completed` with `Success claimed` beside `Auto-renew Enabled`,
+  evidence_outage `INCONCLUSIVE -> Awaiting proof`, aborted backend `Proof unavailable`. The only
+  page errors were `navigator.storage.persisted` rejections from Vercel's preview-only toolbar.
+- Production evidence: PR #2 merged as `b8018fa`; Vercel production deployment
+  `dpl_66YSFH5RKfgNxhjtw2fV4nnVnV45` reached READY and serves `https://closeloop-zeta.vercel.app`
+  with zero compressed manifest entries. Signed out from an external network: `/` 200, `/health`
+  200, `/demo` 308 to `/demo/`, `/demo/` 200 (749 KB identity, 408 KB brotli on the wire), all three
+  `POST /demo/run` scenarios server-generated with the expected verdict tuples and non-live
+  disclosures, extra verdict field 422, unknown scenario 422, cross-origin 403, `/mcp` 401 on GET
+  and unauthenticated initialize without a challenge header, no secrets or local paths in the
+  served bundle. Real WebKit 26.5 (Playwright iPhone 14 emulation, touch), run twice against
+  production, once with `DecompressionStream` removed and once with it present: no raw template,
+  no loader error, every control had a live `onClick` and was the element under its own center
+  point, each run sent exactly one `{"scenario": ...}` POST, healthy `PASS -> Verified`,
+  false_success `FAIL -> Not completed` with `Success claimed` beside `Auto-renew Enabled`,
+  evidence_outage `INCONCLUSIVE -> Awaiting proof`, aborted backend `Proof unavailable`, provenance
+  and Restart worked, and there were no console errors or unhandled rejections. Linux WebKit is
+  the strongest Safari engine available here; no physical iOS device was used.
+
+## Final release QA
+
+- Ran from clean `8dead4a` (the commit Vercel production serves) on branch
+  `claude/closeloop-final-release-qa-m2owxj`. Signed-out live GETs: `/` 200, `/health` 200,
+  `/demo/` 200, `/demo/nope` 404, `/mcp` 401 without a challenge header. The QA sandbox's egress
+  policy blocked direct connections to the Vercel host, so live `POST /demo/run` was not re-sent;
+  every backend, MCP, and browser check below ran locally against the identical deployed commit.
+- Backend: all three scenarios produced server-generated PASS/FAIL/INCONCLUSIVE; extra verdict
+  fields, unknown scenarios, duplicate keys, wrong media types, encodings, oversize bodies, foreign
+  and `null` origins, and oversubscription were rejected as designed.
+- MCP (MCP Inspector CLI plus direct JSON-RPC): negotiation for `2025-11-25` and `2025-03-26`,
+  exactly five closed-schema tools with output schemas, no verdict-write tool, safe errors for
+  extra fields, wrong types, unknown tools/methods, malformed JSON, and oversize inputs; forged,
+  stale, wrong-digest, wrong-owner, replayed, and post-terminal confirmations were refused;
+  cross-principal reads and lists returned nothing.
+- Browser (Chromium, desktop and 390x844): all three outcomes rendered from server data; aborted,
+  503, tampered, mismatched, extra-key, and non-server-generated responses rendered
+  `Proof unavailable`; keyboard operation and focus rings work; no console errors.
+- Findings: no BLOCKING. HIGH: at 390px the fixed scenario bar stacked to 208px and covered the
+  outcome text while stage labels overlapped. MEDIUM: `/demo` without a trailing slash returned 404
+  from the MCP catch-all; `docs/demo-script.md` still described the retired local recording index;
+  the bundle lacked a document title and `lang`. LOW (left as is): public FastAPI `/docs`, legacy
+  validation pages under `/demo/`, muted pending-text contrast, confirm button below the mobile
+  fold.
+- Fixes: explicit `308` redirect from `/demo` to `/demo/`; presentation-only bundle corrections
+  (`lang="en"`, `<title>CloseLoop demo</title>`, a `max-width: 640px` layout rule) applied to the
+  served bundle and to `scripts/integrate_claude_demo.py` so regeneration keeps them;
+  `docs/demo-script.md` now records from the public demo. Two tests were added; the complete suite
+  is `216 passed`.
+- These fixes are on the QA branch. After merge to `main` and the Vercel production deploy,
+  re-verify signed out: `GET /demo` returns `308` to `/demo/`, the 390px layout shows a single-row
+  scenario bar, and the tab title reads `CloseLoop demo`.
 
 ## Final public demo server integration
 

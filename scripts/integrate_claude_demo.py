@@ -7,6 +7,8 @@ the demo data source, safe error state, and disclosure wording.
 from __future__ import annotations
 
 import argparse
+import base64
+import gzip
 import json
 import re
 from pathlib import Path
@@ -16,6 +18,123 @@ def _replace_once(source: str, old: str, new: str, description: str) -> str:
     if source.count(old) != 1:
         raise ValueError(f"expected one {description}, found {source.count(old)}")
     return source.replace(old, new, 1)
+
+
+def inflate_bundled_scripts(source: str) -> str:
+    """Store bundled JavaScript uncompressed so the loader never needs DecompressionStream.
+
+    The Claude bundle gzip-compresses its runtime, React, and ReactDOM manifest entries and
+    inflates them in the browser with ``DecompressionStream``. Safari before 16.4 (iOS 16.3 and
+    earlier) lacks that API; the loader then hands gzip bytes to ``<script>``, the runtime never
+    boots, and the raw template renders with controls that have no handlers. Fonts are already
+    stored raw, so after this step no manifest entry is compressed.
+    """
+
+    match = re.search(
+        r'(<script type="__bundler/manifest">\s*)(.*?)(\s*</script>)',
+        source,
+        flags=re.DOTALL,
+    )
+    if match is None:
+        raise ValueError("Claude bundle manifest was not found")
+    manifest = json.loads(match.group(2))
+    for entry in manifest.values():
+        if not entry.get("compressed"):
+            continue
+        raw = gzip.decompress(base64.b64decode(entry["data"]))
+        entry["data"] = base64.b64encode(raw).decode("ascii")
+        entry["compressed"] = False
+    encoded = json.dumps(manifest, separators=(",", ":"))
+    return source[: match.start(2)] + encoded + source[match.end(2) :]
+
+
+MOBILE_LAYOUT_CSS = """  @media (max-width: 640px) {
+    [role="group"][aria-label="Demo scenarios"] {
+      left: 12px !important; right: 12px !important; max-width: none !important;
+      transform: none !important; flex-wrap: nowrap !important;
+      justify-content: flex-start !important; overflow-x: auto; scrollbar-width: none;
+    }
+    [role="group"][aria-label="Demo scenarios"] > * { flex: 0 0 auto; }
+    [role="group"][aria-label="Demo scenarios"] > span:first-child { display: none; }
+    [role="group"][aria-label="Demo scenarios"] > button {
+      padding: 8px 10px !important; font-size: 0.72rem !important;
+    }
+    [aria-labelledby="lifecycle-heading"] ol { gap: 6px !important; }
+    [aria-labelledby="lifecycle-heading"] ol li > span {
+      font-size: 0.66rem !important; overflow-wrap: anywhere; hyphens: auto;
+    }
+  }
+"""
+
+# Scenario selection and Restart reset state without moving the viewport. On a phone the
+# page is long, so a user who taps a scenario while reading the lower sections keeps
+# looking at them and the controls appear dead. After the existing reset, bring the
+# rendered Resolution Lifecycle card (confirmation state) back into view. Nothing runs
+# until Confirm is pressed, and no verdict logic is involved.
+RESET_WITHOUT_SCROLL = """      receipt: null, evidence: null, result: null, error: null, resultIn: false
+    });
+  }
+"""
+RESET_WITH_SCROLL = """      receipt: null, evidence: null, result: null, error: null, resultIn: false
+    });
+    this.focusInteractiveSection();
+  }
+
+  focusInteractiveSection() {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+    const schedule = typeof window.requestAnimationFrame === "function"
+      ? window.requestAnimationFrame.bind(window)
+      : (fn) => setTimeout(fn, 0);
+    schedule(() => {
+      const live = (selector) => Array.from(document.querySelectorAll(selector))
+        .find((el) => !el.closest("x-dc") && el.getClientRects().length > 0);
+      const section = live('section[aria-labelledby="lifecycle-heading"]');
+      if (!section || typeof section.scrollIntoView !== "function") return;
+      const heading = Array.from(section.querySelectorAll("h3"))
+        .find((h) => /^Confirmation required/.test(h.textContent || ""));
+      const panel = heading ? heading.parentElement : null;
+      const button = panel ? panel.querySelector("button") : null;
+      const bar = live('[role="group"][aria-label="Demo scenarios"]');
+      const reserved = bar ? bar.getBoundingClientRect().height + 24 : 0;
+      const sectionTop = section.getBoundingClientRect().top;
+      const confirmFits = !button ||
+        button.getBoundingClientRect().bottom - sectionTop <= window.innerHeight - reserved;
+      const target = confirmFits || !panel ? section : panel;
+      const reduceMotion = typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    });
+  }
+"""
+
+# Presentation-only corrections for the generated document: language, title, and a
+# narrow-viewport layout so the fixed scenario bar and stage labels never cover or
+# overlap the outcome text. None of these touch data flow or verdict handling.
+PRESENTATION_FIXES = (
+    ("<html><head>", '<html lang="en"><head>', "document language attribute"),
+    (
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        "<title>CloseLoop demo</title>\n",
+        "document title",
+    ),
+    (
+        "  summary::-webkit-details-marker { display: none; }\n",
+        "  summary::-webkit-details-marker { display: none; }\n" + MOBILE_LAYOUT_CSS,
+        "mobile layout rules",
+    ),
+    (
+        RESET_WITHOUT_SCROLL,
+        RESET_WITH_SCROLL,
+        "scenario/restart return to the interactive section",
+    ),
+)
+
+
+def apply_presentation_fixes(template: str) -> str:
+    for old, new, description in PRESENTATION_FIXES:
+        template = _replace_once(template, old, new, description)
+    return template
 
 
 API_CLIENT = r'''const DEMO_API_PATH = "/demo/run";
@@ -439,6 +558,8 @@ def integrate(source: str) -> str:
         "footer verifier disclosure",
     )
 
+    template = apply_presentation_fixes(template)
+
     for forbidden in ("function runProvider", "function verifyCancellation"):
         if forbidden in template:
             raise ValueError(f"local outcome logic remains: {forbidden}")
@@ -447,6 +568,7 @@ def integrate(source: str) -> str:
 
     encoded_template = json.dumps(template, ensure_ascii=True).replace("<", "\\u003c")
     integrated = source[: match.start(2)] + encoded_template + source[match.end(2) :]
+    integrated = inflate_bundled_scripts(integrated)
     return "\n".join(line.rstrip() for line in integrated.splitlines()) + "\n"
 
 

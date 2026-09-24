@@ -17,15 +17,16 @@ Labels describe evidence actually established; they are not interchangeable.
 | Adversarial/security | **PARTIALLY ADVERSARIAL VERIFIED** | 31 confirmation plus 78 general adversarial cases; seven blocking findings fixed; Governor final review | No formal penetration, load/DoS, live identity, live cloud, or network-partition testing |
 | Demo provider | **SIMULATED** | Deterministic healthy, false-success, evidence-outage, and terminal-failure modes traverse the real adapter/lifecycle/verifier path | No real subscription account or third-party provider |
 | Public repository | **VERIFIED** | Anonymous GitHub and raw-content requests returned 200; GitHub detects Apache-2.0 and the public license matches canonical bytes | Submission video remains a separate manual publication step |
-| Public demo backend | **PUBLIC DEMO END-TO-END VERIFIED** | Local API tests proved `/demo/` sends only an allowed scenario to `POST /demo/run`; server responses carry `server_generated: true`, real verifier identifiers, lifecycle timestamps, and verifier-generated PASS/FAIL/INCONCLUSIVE outcomes | Isolated temporary SQLite and deterministic simulated provider only; current browser bundle and hosted deployment were not exercised in this review |
-| Public deployment | **VERIFIED** | Signed-out requests to `https://closeloop-zeta.vercel.app` returned 200 for `/`, `/health`, and `/demo/`; `/demo/run` returned all three server-generated outcomes; `/mcp` correctly returned 401; a fresh browser rendered Verified, Not completed, and Awaiting proof without SSO | No live provider, production storage/auth, Alexa+, or AWS; admission is per instance, not global rate limiting; Origin checks are browser control, not authentication |
+| Persistent demo API flow (local) | **INTEGRATION VERIFIED** | Local API tests exercise the real lifecycle, isolated simulated provider, independent read-back, deterministic verifier, and server-generated result; requests accept only a bounded scenario selector | Temporary SQLite and simulated provider only; browser test skipped because Playwright is unavailable; current public deployment unverified |
+| Previous public demo release | **HISTORICAL UI/BROWSER VERIFIED** | Deployment dpl_7qzhdU8867s5w6yQZKCY2hU124AA for commit 5c36387 was checked signed out; Chromium and Playwright WebKit iPhone emulation exercised the then-current demo, including without DecompressionStream | This predates persistent resolutions and does not verify the current /demo/ experience or API |
+| Persistent-resolution public deployment | **NOT VERIFIED** | No signed-out production route, lifecycle, responsive, or browser checks have been run against the persistent-resolution build | No live Alexa+, provider, production scheduler, or AWS claim; publication alone would not establish product behavior |
 | Live AWS | **NOT VERIFIED** | None claimed | Credentials, table, IAM, and CloudFormation execution unavailable |
 | Live Alexa+ | **NOT VERIFIED** | None claimed | Partner tooling, onboarding, public endpoint, OAuth, confirmation authority, and host rendering unavailable |
 
 ## Final evidence counts
 
-- Persistent-resolution evolution full suite (2026-09-24): **232 passed, 0 failed, 0 skipped**. The starting release baseline was **218 passed**.
-- Focused MCP/Alexa contract and demo API suite: **46 passed, 0 failed, 0 skipped**.
+- Reconciled full suite (2026-09-24): **235 passed, 0 failed, 1 skipped** (236 collected). The browser regression was skipped because Playwright is unavailable; the incoming local evolution baseline was 232 passed with no skips.
+- Focused MCP/Alexa contract and demo API suite: **49 passed, 0 failed, 0 skipped**.
 - Previous milestone counts below are historical and predate this evolution (pre-integration deployment baseline: 187; Milestone 7 baseline: 183; previous full-suite total: 214).
 - Previous public demo API/browser/security: **27 passed**; existing MCP/demo cases: **12 passed**; combined focused checkpoint: **39 passed**.
 - Confirmation-attestation suite: **31 passed**.
@@ -44,4 +45,4 @@ DynamoDB follow-up metadata and conditional updates are covered through Moto-bac
 
 ## Current repository/demo state (2026-09-24)
 
-The checked-in `/demo/` page now leads with the persistent-resolution story. The hosted Vercel deployment listed in the historical verification table was not redeployed or re-checked as part of this change; the prior result does not establish the revised UI or API is live there. Current verification is local. On 2026-09-24, a local browser run showed the initial confirmation gate, the full resolution timeline with simulated next-check time, and the evidence-outage path remaining open. The updated public page was not tested in an Alexa+ host.
+The checked-in /demo/ page now leads with the persistent-resolution story. The prior Vercel result covers an older release only; no signed-out production browser or route check has been run against the persistent-resolution build. Current verification is local. On 2026-09-24, a local browser run showed the initial confirmation gate, the full resolution timeline with simulated next-check time, and the evidence-outage path remaining open. The updated public page was not tested in an Alexa+ host.
