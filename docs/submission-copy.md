@@ -64,6 +64,8 @@ CloseLoop is designed as an outcome-management layer beneath Alexa+ experiences,
 
 **Why does Alexa+ need this?** An assistant can report that a tool accepted an action. The consumer needs to know whether the real account changed, and what happens when it did not.
 
+**Isn’t this just CUF or verification?** Verification is one internal step. CloseLoop adds persistent outcome ownership, attention, separately authorized recovery, reverification, and a consumer receipt. No CUF source code is copied into this repository.
+
 **Why not trust the provider API?** The provider response is recorded as a claim. A separate account read-back supplies the evidence used by the deterministic verifier.
 
 **What if CloseLoop does not know?** It says Awaiting proof, leaves the resolution open, and does not convert missing evidence into success or failure.
