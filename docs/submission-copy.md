@@ -143,11 +143,11 @@ claims until the customer-visible outcome is independently observed.
 - Alexa+/MCP: **12 passed**.
 - Proof-card/UI: **16 passed**.
 - Canonical demo: PASS → Verified; FAIL → Not completed; INCONCLUSIVE → Awaiting proof.
-- Browser: **LOCAL UI/BROWSER VERIFIED** for persistent resolution, recovery, and violation flows. Production checks below cover only the reconciled pre-recovery release until the recovery commit is deployed.
+- Browser: **LOCAL UI/BROWSER VERIFIED** for persistent resolution, recovery, and violation flows. The recovery deployment was signed-out browser checked at the canonical URL across all five scenarios and representative viewport widths.
   deployed isolated server lifecycle/verifier.
 - Alexa+: **INTEGRATION VERIFIED locally; live NOT VERIFIED**.
 - AWS: **SIMULATED; live NOT VERIFIED**.
-- Public deployment: the reconciled persistent-resolution baseline was signed-out verified; the current recovery evolution remains **NOT VERIFIED IN PRODUCTION** until its own commit is deployed and exercised.
+- Public deployment: the reconciled persistent-resolution baseline was signed-out verified; the recovery commit `8af99db73a631821712b7e559ecf335b66ed80a8` is **SIGNED-OUT BROWSER VERIFIED** through the existing Vercel deployment. This verifies the simulated demo only.
 
 ## Submission links
 

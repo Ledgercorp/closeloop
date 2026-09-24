@@ -25,7 +25,7 @@ Labels describe evidence actually established; they are not interchangeable.
 
 ## Final evidence counts
 
-- Current recovery working tree (2026-09-24): **249 passed, 0 failed, 0 skipped** with Playwright enabled; full suite and Chromium browser regression passed.
+- Recovery release local verification (2026-09-24): **249 passed, 0 failed, 0 skipped** with Playwright enabled; full suite and Chromium browser regression passed.
 - Reconciled pre-recovery baseline: **235 passed, 0 failed, 1 skipped** (236 collected); its browser regression was skipped before Playwright was installed.
 - Focused MCP/Alexa contract and demo API suite: **49 passed, 0 failed, 0 skipped**.
 - Previous milestone counts below are historical and predate this evolution (pre-integration deployment baseline: 187; Milestone 7 baseline: 183; previous full-suite total: 214).
@@ -46,7 +46,7 @@ DynamoDB follow-up metadata and conditional updates are covered through Moto-bac
 
 ## Current repository/demo state (2026-09-24)
 
-The signed-out production baseline at `e38bff72616faaa536bdccbf72419a26fdc6c77f` was checked on 2026-09-24: `/demo/` was public, the three lifecycle/verdict outcomes were correct, representative widths had no overflow, and Chromium reported no page errors. Those checks do not include the recovery evolution. The updated page was not tested in an Alexa+ host.
+The pre-recovery production baseline at `e38bff72616faaa536bdccbf72419a26fdc6c77f` and recovery deployment at `8af99db73a631821712b7e559ecf335b66ed80a8` were both checked signed out on 2026-09-24. The recovery deployment passed all five public scenarios, scenario-only request checks, 390/820/1280 responsive widths, proof disclosure, and page-error checks. The demo remains simulated and was not exercised in an Alexa+ host.
 
 ## Closed-loop recovery evolution status
 
@@ -57,7 +57,7 @@ The signed-out production baseline at `e38bff72616faaa536bdccbf72419a26fdc6c77f`
 | Recovery authorization/execution | **LOCALLY VERIFIED** | Separate recovery confirmation, original-token rejection, owner/action/target binding, duplicate/concurrent rejection, receipt/evidence separation | Simulated provider only; a crash after `EXECUTING` can require operator recovery; no automatic replay |
 | Recovery reverification | **LOCALLY VERIFIED** | Browser and lifecycle tests show claimed follow-up cannot self-certify; fresh read-back yields PASS or remains INCONCLUSIVE | Production worker/scheduler not implemented |
 | Outcome violation | **LOCALLY VERIFIED** | Correlated simulated post-deadline charge produces FAIL/Not completed, URGENT event, and separately confirmed unsent draft | No bank or billing-account access; no actual refund request sent |
-| Recovery and violation browser flow | **BROWSER VERIFIED LOCALLY** | Chromium Playwright regression exercises both flows, viewport overflow, proof disclosure, and scenario-only request bodies | Production recovery build not yet deployed/exercised |
+| Recovery and violation browser flow | **SIGNED-OUT BROWSER VERIFIED** | Canonical production URL passed all five Playwright scenarios, proof disclosure, scenario-only request bodies, widths 390/820/1280, and zero page errors | Simulated provider/time/consent; no live Alexa+, AWS, billing provider, or scheduler |
 | Prior public deployment baseline | **SIGNED-OUT VERIFIED** | Reconciled `e38bff72616faaa536bdccbf72419a26fdc6c77f` was exercised at `/demo/` | Does not cover current recovery changes |
-| Current recovery deployment | **NOT VERIFIED** | Recovery changes are not yet deployed | Push to the existing project, then repeat signed-out judge-style checks |
+| Recovery feature deployment | **SIGNED-OUT VERIFIED** | Existing Vercel deployment `8CxJdnHNEycR3qoxT9YNN6qwQkF9`, successful status 2026-09-24 18:43:25 UTC, commit `8af99db73a631821712b7e559ecf335b66ed80a8`; canonical `/demo/` exercised signed out | Verifies simulated public demo only; no live integrations |
 | Live scheduler / proactive delivery | **NOT IMPLEMENTED / NOT VERIFIED** | No scheduler worker or Alexa notification adapter is active | EventBridge Scheduler/Lambda delivery and Alexa Proactive Events remain roadmap |

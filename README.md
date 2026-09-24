@@ -84,7 +84,7 @@ a bearer-token issuer, and a separate trusted confirmation authority. Missing pr
 authentication, or confirmation configuration fails closed. Never deploy the test or recording
 signing keys.
 
-The current recovery working tree has **249 passed, 0 failed, 0 skipped** with Playwright enabled. Security is
+The recovery release has **249 passed, 0 failed, 0 skipped** with Playwright enabled. Security is
 **PARTIALLY ADVERSARIAL VERIFIED**:
 109 prior adversarial/confirmation cases plus the new recovery binding, replay, concurrency, outage, and deduplication tests cover verdict manipulation, authorization isolation,
 confirmation replay and tampering, lifecycle races, forged evidence, MCP abuse, UI injection,
@@ -103,7 +103,7 @@ information leakage, and failure behavior. Seven blocking findings were fixed. S
 - [Build provenance](docs/build-provenance.md)
 - [Trust model](docs/trust-model.md)
 
-The reconciled persistent-resolution deployment at `e38bff72616faaa536bdccbf72419a26fdc6c77f` was exercised signed out at `/demo/`: all three outcomes returned their expected lifecycle/verdict pair, widths 390/820/1280 had no horizontal overflow, and Chromium reported no page errors. That verifies only the pre-recovery release. The current recovery evolution is locally verified but not yet deployed. Locally, `/demo/run` accepts only a bounded scenario selector. The production MCP endpoint remains bearer-authenticated. The demo uses isolated temporary state and a simulated provider; no live Alexa+, provider, AWS, production storage, OAuth, confirmation authority, Alexa notification delivery, or scheduler is claimed.
+The reconciled persistent-resolution deployment at `e38bff72616faaa536bdccbf72419a26fdc6c77f` was exercised signed out at `/demo/`: all three outcomes returned their expected lifecycle/verdict pair, widths 390/820/1280 had no horizontal overflow, and Chromium reported no page errors. The recovery release `8af99db73a631821712b7e559ecf335b66ed80a8` was deployed by the existing Vercel Git integration (`8CxJdnHNEycR3qoxT9YNN6qwQkF9`, successful status at 2026-09-24 18:43:25 UTC) and then exercised signed out at the same URL. Chromium verified all five scenarios, scenario-only browser requests, proof disclosure, widths 390/820/1280, and no page errors. The demo API rejected verdict/evidence/identity payloads with HTTP 422/413/413. This verifies only the simulated public demo; no live Alexa+, provider, billing, scheduler, or AWS service is claimed. Locally, `/demo/run` accepts only a bounded scenario selector. The production MCP endpoint remains bearer-authenticated. The demo uses isolated temporary state and a simulated provider; no live Alexa+, provider, AWS, production storage, OAuth, confirmation authority, Alexa notification delivery, or scheduler is claimed.
 
 ## Provenance and license
 
