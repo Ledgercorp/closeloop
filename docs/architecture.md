@@ -187,3 +187,13 @@ Persistent outcome obligation
 ```
 
 The browser demo selects only a bounded server-side scenario; it cannot submit a verdict, evidence, or confirmation attestation. StreamBox, billing observations, time, and spoken Alexa consent are simulated. The attention, recovery, and verification code paths are CloseLoop behavior. Live Alexa+ invocation, Proactive Events delivery, a scheduler/worker, live provider integration, and live DynamoDB remain unverified or future work; none is drawn as a deployed service here. Recovery execution and its receipt do not alter the verifier’s authority.
+
+### Future integrations (not implemented or deployed)
+
+```text
+Alexa Proactive Events adapter ─────── planned attention delivery
+EventBridge Scheduler / worker ────── planned due-check delivery
+Live subscription provider adapter ── simulated by StreamBox in the demo
+```
+
+These are roadmap boundaries, not runtime components. No production schedule, proactive Alexa notification, or connected provider is represented by the diagram above.
