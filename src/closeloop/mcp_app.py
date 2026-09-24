@@ -515,7 +515,7 @@ _PROOF_CARD_TEMPLATE = r"""<!doctype html>
     } from "https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps@1.7.5/+esm";
 
     const rules = Object.freeze(JSON.parse(document.getElementById("outcome-rules").textContent));
-    const terminalStates = new Set(Object.values(rules).map((rule) => rule.lifecycleState));
+    const terminalStates = new Set(["VERIFIED", "NOT_COMPLETED"]);
     const byId = (id) => document.getElementById(id);
     const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
     const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -582,6 +582,38 @@ _PROOF_CARD_TEMPLATE = r"""<!doctype html>
       });
     };
 
+    const validOpenHistory = (history, attempts) => {
+      if (!Array.isArray(attempts) || attempts.length < 1 || !Array.isArray(history)) return false;
+      const expected = ["REQUESTED", "AWAITING_CONFIRMATION", "EXECUTING", "VERIFYING", "AWAITING_PROOF"];
+      for (let index = 1; index < attempts.length; index += 1) {
+        expected.push("VERIFYING", "AWAITING_PROOF");
+      }
+      if (history.length !== expected.length) return false;
+      let previousTime = Number.NEGATIVE_INFINITY;
+      const validTransitions = history.every((transition, index) => {
+        if (
+          !isObject(transition) || transition.state !== expected[index] ||
+          !validTimestamp(transition.occurred_at)
+        ) return false;
+        const currentTime = Date.parse(transition.occurred_at);
+        if (currentTime < previousTime) return false;
+        previousTime = currentTime;
+        return true;
+      });
+      return validTransitions && attempts.every((attempt) =>
+        isObject(attempt) && attempt.verdict === "INCONCLUSIVE" &&
+        attempt.consumer_state === "Awaiting proof" && typeof attempt.reason === "string" &&
+        validTimestamp(attempt.checked_at) && isObject(attempt.evidence) &&
+        typeof attempt.evidence.account_readable === "boolean" &&
+        (attempt.evidence.auto_renew === null || typeof attempt.evidence.auto_renew === "boolean") &&
+        (attempt.evidence.effective_end_date === null ||
+          validCalendarDate(attempt.evidence.effective_end_date)) &&
+        (attempt.evidence.freshness_seconds === null ||
+          (Number.isInteger(attempt.evidence.freshness_seconds) &&
+            attempt.evidence.freshness_seconds >= 0))
+      );
+    };
+
     const validTerminalEvidence = (data, verdict) => {
       const verifier = data.verification;
       if (
@@ -639,7 +671,7 @@ _PROOF_CARD_TEMPLATE = r"""<!doctype html>
       const verification = data.verification_status;
       const isTerminal = data.is_terminal;
       const confirmationRequired = data.confirmation_required;
-      const terminalSignal = verdict !== null || consumerState !== null || terminalStates.has(lifecycle);
+      const terminalSignal = verdict === "PASS" || verdict === "FAIL" || terminalStates.has(lifecycle);
 
       if (terminalSignal) {
         const rule = rules[verdict];
@@ -662,6 +694,30 @@ _PROOF_CARD_TEMPLATE = r"""<!doctype html>
       if (nested !== null || isTerminal === true) return invalidView();
       const hasExecutionEvidence = data.execution_claim !== undefined && data.execution_claim !== null;
       const hasReadBack = data.independent_read_back !== undefined && data.independent_read_back !== null;
+
+      if (lifecycle === "AWAITING_PROOF") {
+        if (
+          verdict !== "INCONCLUSIVE" || consumerState !== "Awaiting proof" ||
+          verification !== "INCONCLUSIVE" || execution !== "completed" ||
+          (statusShape && (isTerminal !== false || confirmationRequired !== false)) ||
+          (evidenceShape && (
+            !isObject(data.verification) ||
+            data.verification.verdict !== "INCONCLUSIVE" ||
+            data.verification.consumer_state !== "Awaiting proof" ||
+            !validTimestamp(data.verification.evaluated_at) ||
+            derivedEvidenceVerdict(data.execution_claim, data.independent_read_back) !== "INCONCLUSIVE" ||
+            !validOpenHistory(data.state_history, data.verification_history)
+          ))
+        ) return invalidView();
+        return {
+          valid: true,
+          tone: "awaiting",
+          symbol: "?",
+          outcome: "Awaiting proof",
+          support: "The request was sent, but CloseLoop still can’t verify the result. This resolution remains open.",
+          phase: "verifying"
+        };
+      }
 
       if (lifecycle === "AWAITING_CONFIRMATION") {
         if (

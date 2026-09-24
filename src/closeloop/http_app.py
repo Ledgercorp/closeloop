@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings
@@ -110,6 +111,10 @@ def create_app(
     )
 
     public_demo_dir = Path(__file__).with_name("public_demo")
+    @app.get("/demo/", include_in_schema=False)
+    def persistent_resolution_demo() -> FileResponse:
+        return FileResponse(public_demo_dir / "resolution.html")
+
     app.mount(
         "/demo",
         StaticFiles(directory=public_demo_dir, html=True),

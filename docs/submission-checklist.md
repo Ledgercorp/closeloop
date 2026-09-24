@@ -5,7 +5,7 @@
 - [x] Public GitHub repository contains all source, setup, demo, tests, infrastructure, and docs.
 - [x] Canonical Apache-2.0 text is stored in `LICENSE` and linked near the README opening.
 - [x] README communicates the value proposition in under 10 seconds.
-- [x] Exactly five MCP tools are documented; no verdict-write capability is claimed or exposed.
+- [x] Six MCP tools are documented; no verdict-write capability is claimed or exposed.
 - [x] Alexa+, AWS, browser, security, provider, and deployment claims use explicit verification labels.
 - [x] Build provenance distinguishes CloseLoop from prior CUF concepts/source.
 - [x] Product feedback answers use, strengths, shortcomings, onboarding, and reuse intent.
@@ -16,12 +16,12 @@
 
 ## Video recording checklist
 
-- [ ] Open `https://closeloop-zeta.vercel.app/demo/` in a fresh signed-out browser.
+- [ ] After the revised demo is redeployed and rechecked, open `https://closeloop-zeta.vercel.app/demo/` in a fresh signed-out browser. The currently listed deployment has not been updated for this evolution.
 - [ ] Confirm the polished UI identifies the simulated provider and non-live Alexa+/AWS boundaries.
-- [ ] Record the canonical request: “Alexa, cancel my subscription and make sure I won’t be charged again.”
-- [ ] Show **Confirmation required** before any action.
-- [ ] Show healthy **PASS → Verified** and expand execution/read-back/verifier provenance.
-- [ ] Show false-success **FAIL → Not completed** with provider success and auto-renew still on together.
+- [ ] Record the canonical request: “Alexa, cancel StreamBox before Friday and make sure it actually happens.”
+- [ ] Show the initial **Waiting for your confirmation** state and that no cancellation request has been sent.
+- [ ] Select **Confirm and play the resolution**; show healthy **PASS → Verified** and expand execution/read-back/verifier provenance.
+- [ ] Show false-success as open **INCONCLUSIVE → Awaiting proof**: provider accepted, auto-renew is still on, and the simulated next-check time is visible.
 - [ ] Show outage **INCONCLUSIVE → Awaiting proof**.
 - [ ] Show the implemented architecture and verification matrix briefly.
 - [ ] Keep runtime below 180 seconds; target 2:50–2:55.
@@ -32,13 +32,12 @@
 
 ## Exact submission screenshots
 
-Capture these from the signed-out public demo unless another source is specified:
+Capture these only after the revised demo has been redeployed and checked signed out; the current hosted deployment does not include this evolution. Use the local demo until then:
 
-1. **Hero / confirmation:** initial public demo state showing the task and “Confirmation required.”
-2. **Primary result:** select Verified path, confirm, and capture “Verified” plus completed lifecycle.
-3. **False-success proof:** select False success and expand proof so provider success, auto-renew on,
-   and “Not completed” are visible together. This is the highest-value screenshot.
-4. **Uncertainty proof:** select Evidence outage and capture “Awaiting proof.”
+1. **Hero / confirmation:** initial state shows **Waiting for your confirmation** and that no cancellation request has been sent.
+2. **Primary result:** select **Confirm and play the resolution** and capture **Verified** plus the completed lifecycle.
+3. **False-success proof:** show the request remains open after provider acceptance and auto-renew still on; include its follow-up state.
+4. **Uncertainty proof:** select See when proof is unavailable and capture “Awaiting proof.”
 5. **Provenance detail:** Verified result expanded to show action receipt, independent read-back,
    deterministic verifier, timestamps, and identifiers.
 6. **Implemented architecture:** README “How it works” diagram, without aspirational services.
@@ -46,7 +45,7 @@ Capture these from the signed-out public demo unless another source is specified
    `infra/aws/closeloop-dynamodb.json` resource. Caption it **Moto-simulated; not live AWS**.
 8. **Test/security proof:** final terminal showing the complete passing count, plus the security
    report’s findings summary. Do not expose test signing keys.
-9. **MCP discovery, if space allows:** five-tool Inspector output and MCP Apps resource metadata.
+9. **MCP discovery, if space allows:** seven-tool Inspector output and MCP Apps resource metadata.
    Caption it **MCP integration verified locally; not a live Alexa+ client**.
 
 ## Devpost manual actions

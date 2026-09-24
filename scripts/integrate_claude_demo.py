@@ -19,7 +19,7 @@ def _replace_once(source: str, old: str, new: str, description: str) -> str:
 
 
 API_CLIENT = r'''const DEMO_API_PATH = "/demo/run";
-const RESULT_SCHEMA = "closeloop.public-demo-result/v1";
+const RESULT_SCHEMA = "closeloop.public-demo-result/v2";
 const ALLOWED_SCENARIOS = new Set(["healthy", "false_success", "evidence_outage"]);
 const TERMINAL_TUPLES = Object.freeze({
   PASS: ["Verified", "VERIFIED"],
@@ -59,7 +59,8 @@ function parseDemoResponse(payload, requestedScenario) {
   const verification = payload.verification;
   const disclosure = payload.disclosure;
   if (!exactKeys(resolution, [
-    "resolution_id", "action", "action_digest", "lifecycle_state", "requested_at",
+    "resolution_id", "action", "action_digest", "lifecycle_state", "is_terminal", "next_check_at", "last_checked_at",
+    "check_count", "max_checks", "resolved_at", "requested_at",
     "confirmed_at", "executing_at", "verifying_at", "completed_at"
   ])) return null;
   if (!exactKeys(claim, [

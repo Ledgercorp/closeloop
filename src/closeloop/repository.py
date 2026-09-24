@@ -16,7 +16,9 @@ from sqlalchemy import (
     Text,
     create_engine,
     insert,
+    inspect as sqlalchemy_inspect,
     select,
+    text,
     update,
 )
 from sqlalchemy.engine import Engine
@@ -64,6 +66,15 @@ _resolutions = Table(
     Column("verification", JSON),
     Column("verified_at", DateTime(timezone=True)),
     Column("state_history", JSON, nullable=False),
+    Column("resolution_type", String(32), nullable=True),
+    Column("target", JSON),
+    Column("last_checked_at", DateTime(timezone=True)),
+    Column("next_check_at", DateTime(timezone=True)),
+    Column("check_count", Integer),
+    Column("max_checks", Integer),
+    Column("resolved_at", DateTime(timezone=True)),
+    Column("resolution_reason", Text),
+    Column("verification_history", JSON),
     Column("version", Integer, nullable=False),
 )
 
@@ -202,6 +213,23 @@ class SqlResolutionRepository:
             raise ResolutionStorageUnavailableError("durable resolution storage failed") from exc
         return [record_from_mapping(row) for row in rows]
 
+    def list_recent_owned(self, owner_id: str, limit: int) -> list[ResolutionRecord]:
+        self._ensure_schema()
+        try:
+            with self._engine.connect() as connection:
+                rows = connection.execute(
+                    select(_resolutions)
+                    .where(
+                        _resolutions.c.owner_id == owner_id,
+                        _resolutions.c.state.in_([state.value for state in TERMINAL_STATES]),
+                    )
+                    .order_by(_resolutions.c.updated_at.desc())
+                    .limit(limit)
+                ).mappings().all()
+        except SQLAlchemyError as exc:
+            raise ResolutionStorageUnavailableError("durable resolution storage failed") from exc
+        return [record_from_mapping(row) for row in rows]
+
     def _ensure_schema(self) -> None:
         if self._schema_ready:
             return
@@ -210,6 +238,43 @@ class SqlResolutionRepository:
                 return
             try:
                 _metadata.create_all(self._engine)
+                present = {
+                    column["name"]
+                    for column in sqlalchemy_inspect(self._engine).get_columns(
+                        "closeloop_resolutions"
+                    )
+                }
+                for name, sql_type in (
+                    ("resolution_type", "VARCHAR(32)"),
+                    ("target", "JSON"),
+                    ("last_checked_at", "TIMESTAMP WITH TIME ZONE"),
+                    ("next_check_at", "TIMESTAMP WITH TIME ZONE"),
+                    ("check_count", "INTEGER"),
+                    ("max_checks", "INTEGER"),
+                    ("resolved_at", "TIMESTAMP WITH TIME ZONE"),
+                    ("resolution_reason", "TEXT"),
+                    ("verification_history", "JSON"),
+                ):
+                    if name not in present:
+                        try:
+                            with self._engine.begin() as connection:
+                                connection.execute(
+                                    text(
+                                        "ALTER TABLE closeloop_resolutions "
+                                        f"ADD COLUMN {name} {sql_type}"
+                                    )
+                                )
+                            present.add(name)
+                        except SQLAlchemyError:
+                            # Another process may have applied this additive migration.
+                            present = {
+                                column["name"]
+                                for column in sqlalchemy_inspect(self._engine).get_columns(
+                                    "closeloop_resolutions"
+                                )
+                            }
+                            if name not in present:
+                                raise
             except SQLAlchemyError as exc:
                 raise ResolutionStorageUnavailableError(
                     "durable resolution storage is unavailable"
@@ -265,6 +330,9 @@ class UnavailableResolutionRepository:
         self._fail()
 
     def list_open_owned(self, owner_id: str, limit: int) -> list[ResolutionRecord]:
+        self._fail()
+
+    def list_recent_owned(self, owner_id: str, limit: int) -> list[ResolutionRecord]:
         self._fail()
 
 

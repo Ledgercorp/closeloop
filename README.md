@@ -1,27 +1,24 @@
 # CloseLoop
 
-**CloseLoop doesn’t trust an agent saying it finished. It independently checks the result before Alexa+ tells you the task is done.**
+**CloseLoop lets you hand Alexa+ a consequential task and keeps responsibility for it until the real-world outcome can actually be verified.**
 
-> Alexa+ can take action. CloseLoop makes sure “done” actually means done.
+> Alexa+ can take the action. CloseLoop makes sure the outcome actually happened.
 
-CloseLoop is a consumer-facing verified-resolution agent for consequential life-admin tasks. The
-demo cancels a subscription, reads the resulting account state through a separate evidence path,
-and lets deterministic code—not the agent or provider—produce one of three outcomes:
+A provider receipt is a claim, not proof. CloseLoop preserves the request, confirmation, action claim, independent evidence, verification history, and follow-up schedule until the resolution has a justified outcome.
+
+Subscription cancellation is the implemented workflow. Refunds, returns, warranty claims, service requests, and appointments are represented as future resolution types, not implemented integrations.
+
+Deterministic code owns the evidence outcomes:
 
 - `PASS` → **Verified**
 - `FAIL` → **Not completed**
 - `INCONCLUSIVE` → **Awaiting proof**
 
-The memorable case is false success: the provider says cancellation worked, independent read-back
-shows auto-renew is still on, and CloseLoop refuses to call the task done.
+If StreamBox accepts cancellation while auto-renew is still on, the resolution remains open: “StreamBox accepted the cancellation request, but auto-renew is still on. I’m not marking this resolved yet.” A later session retrieves the same resolution and can recheck it.
 
 Primary track: **Alexa+** · Mini challenge: **AWS Builder** · License: [Apache-2.0](LICENSE)
 
-**[Open the public judge demo](https://closeloop-zeta.vercel.app/demo/)** — a signed-out,
-isolated deterministic demonstration of confirmation plus Verified, Not completed, and Awaiting
-proof. The browser submits only one of three allowed scenarios; the deployed server runs the real
-CloseLoop lifecycle, independent read-back, and verifier, then returns presentation-safe evidence.
-It is explicitly not a live Alexa+, production-provider, or AWS deployment.
+The checked-in demo runs at `http://127.0.0.1:8000/demo/`. The existing hosted URL is not updated or re-verified by this repository change. No live Alexa+, provider, or AWS verification is claimed.
 
 ## Run the server-backed demo locally
 
@@ -33,63 +30,34 @@ PYTHONPATH=src uv run --no-editable uvicorn main:app \
   --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000/demo/`. Confirm starts the narrow anonymous `POST /demo/run` flow. The
-route accepts exactly `healthy`, `false_success`, or `evidence_outage`, creates isolated temporary
-state, and uses the real lifecycle, demo provider, independent read-back, and deterministic
-verifier. The browser cannot submit a verdict, status, success value, evidence, provider, production
-resolution, or trusted production confirmation. The provider and demo confirmation remain explicit
-simulations; this is not a live Alexa+ client, real subscription provider, or live AWS environment.
+Open `http://127.0.0.1:8000/demo/`. The page starts at **Waiting for your confirmation**; no cancellation request is sent until you select **Confirm and play the resolution**. That runs `persistent_resolution`: accepted request, contradictory read-back, later-session retrieval, scheduled recheck, and final proof. The timeline shows the simulated next-check time. **See when proof is unavailable** exercises the outage path. `/demo/run` also offers `healthy`, `false_success`, `evidence_outage`, and `terminal_failure` scenarios.
 
-The [sub-three-minute video script](docs/demo-script.md) gives the exact recording order and
-narration.
+The server uses temporary local SQLite and a deterministic simulated provider. Browser input can select a scenario only; it cannot supply an outcome, evidence, provider, owner, or confirmation attestation. Time advancement is a demo simulation, not a scheduler. This is not live Alexa+, a production provider, or AWS. See the [demo script](docs/demo-script.md) for the recording walkthrough.
 
 ## How it works
 
 ```text
-MCP client (Alexa+ target)
-       │  bearer-authenticated Streamable HTTP /mcp
-       ▼
-five closed-schema tools ── trusted, action-bound confirmation
-       │
-       ▼
-execution plane ─────────── provider action receipt (claim only)
-       │
-       ▼
-independent read-back ───── resulting account evidence
-       │
-       ▼
-deterministic verifier ──── PASS / FAIL / INCONCLUSIVE
-       │
-       ├── SQL or DynamoDB authoritative lifecycle/evidence state
-       └── Alexa-ready structured result + read-only MCP Apps proof card
+Alexa+ / MCP client
+        │ owner-authenticated resolution queries
+        ▼
+Persistent resolution record ─── request, confirmation, history, next check
+        │
+        ├── action plane ───────── provider receipt (claim only)
+        ├── independent read-back ─ account evidence
+        └── deterministic verifier ─ PASS / FAIL / INCONCLUSIVE
+
+AWAITING_PROOF remains open → bounded follow-up read-back → terminal outcome
 ```
 
-The public MCP surface has exactly five tools:
+The seven MCP tools are `start_resolution`, `confirm_resolution_action`, `get_resolution_status`, `get_resolution_evidence`, `list_open_resolutions`, `list_recent_resolutions`, and `recheck_resolution`. The open list contains unresolved tasks only; the separate recent list contains terminal outcomes. Recheck repeats only independent observation, never the action. There is no `set_verdict`, `mark_success`, `force_pass`, or equivalent tool.
 
-- `start_resolution`
-- `confirm_resolution_action`
-- `get_resolution_status`
-- `get_resolution_evidence`
-- `list_open_resolutions`
-
-There is no `set_verdict`, `mark_success`, `force_pass`, or equivalent capability. The executor’s
-receipt is evidence, never the verdict. Consequential execution requires a signed, short-lived
-`closeloop.confirmation/v1` attestation bound to the authenticated owner, exact resolution, and
-canonical action digest. Replay, stale, tampered, cross-owner, and cross-resolution attestations
-fail closed.
+`AWAITING_PROOF` is nonterminal and has a four-check total limit including the initial read-back. Verified and not-completed records are immutable. Confirmation remains signed, short-lived, single-use, owner-bound, resolution-bound, action-digest-bound, and replay-resistant.
 
 ## Alexa+ integration
 
-CloseLoop is a self-hosted MCP server using the official MCP Python SDK. `/mcp` uses stateless
-Streamable HTTP and negotiates MCP `2025-11-25` plus the documented `2025-03-26` lifecycle example.
-It provides closed conversation-ready schemas, bearer authentication, RFC 9728 protected-resource
-metadata, safe errors, and a `ui://closeloop/proof-card.html` MCP Apps resource with meaningful
-text fallback.
+CloseLoop exposes an authenticated self-hosted MCP server over Streamable HTTP, with closed schemas, protected-resource metadata, safe errors, and a read-only MCP Apps proof card. Local MCP integration tests exercise tool discovery, authentication, owner scoping, resolution persistence, and bounded rechecks.
 
-Verification level: **INTEGRATION VERIFIED locally**. Standard MCP Inspector and integration tests
-proved initialization, five-tool discovery, schemas, authenticated calls, resources, and all three
-outcomes. Alexa AI CLI/Local Inspector access, account linking, an Alexa-reachable public endpoint,
-and live Alexa+ rendering were unavailable, so CloseLoop does not claim live Alexa+ verification.
+Alexa+ account linking, live device rendering, and live Amazon session testing have not been verified. Do not present this repository or its demo as a live Alexa+ deployment.
 
 ## Why DynamoDB matters
 

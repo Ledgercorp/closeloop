@@ -68,7 +68,7 @@ def repository_for(resource):
     ("provider_mode", "verdict", "consumer_state"),
     [
         ("healthy", "PASS", "Verified"),
-        ("false_success", "FAIL", "Not completed"),
+        ("false_success", "INCONCLUSIVE", "Awaiting proof"),
         ("evidence_outage", "INCONCLUSIVE", "Awaiting proof"),
     ],
 )

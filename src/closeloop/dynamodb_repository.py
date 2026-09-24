@@ -174,6 +174,33 @@ class DynamoDbResolutionRepository:
         records.sort(key=lambda record: (record.created_at, record.resolution_id))
         return records[:limit]
 
+    def list_recent_owned(self, owner_id: str, limit: int) -> list[ResolutionRecord]:
+        records: list[ResolutionRecord] = []
+        exclusive_start_key: Mapping[str, object] | None = None
+        try:
+            while True:
+                request: dict[str, object] = {
+                    "KeyConditionExpression": Key("owner_id").eq(owner_id),
+                    "ConsistentRead": True,
+                }
+                if exclusive_start_key is not None:
+                    request["ExclusiveStartKey"] = exclusive_start_key
+                response = self._table.query(**request)
+                for item in response.get("Items", []):
+                    record = record_from_mapping(self._mapping(item))
+                    if record.state in TERMINAL_STATES:
+                        records.append(record)
+                next_key = response.get("LastEvaluatedKey")
+                if not next_key:
+                    break
+                exclusive_start_key = self._mapping(next_key)
+        except ResolutionStorageUnavailableError:
+            raise
+        except (BotoCoreError, ClientError) as exc:
+            self._raise_storage_error(exc)
+        records.sort(key=lambda record: (record.updated_at, record.resolution_id), reverse=True)
+        return records[:limit]
+
     def _classify_failed_save(
         self, record: ResolutionRecord, expected_version: int
     ) -> None:

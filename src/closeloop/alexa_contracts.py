@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-ProviderMode = Literal["healthy", "false_success", "evidence_outage"]
+ProviderMode = Literal["healthy", "false_success", "evidence_outage", "terminal_failure"]
 LifecycleStateValue = Literal[
     "REQUESTED",
     "AWAITING_CONFIRMATION",
@@ -14,6 +14,9 @@ LifecycleStateValue = Literal[
     "VERIFIED",
     "NOT_COMPLETED",
     "AWAITING_PROOF",
+]
+ResolutionTypeValue = Literal[
+    "CANCELLATION", "REFUND", "RETURN", "WARRANTY_CLAIM", "SERVICE_REQUEST", "APPOINTMENT"
 ]
 ExecutionStatus = Literal["not_started", "in_progress", "completed"]
 VerificationStatus = Literal["not_started", "in_progress", "PASS", "FAIL", "INCONCLUSIVE"]
@@ -39,7 +42,13 @@ class ResolutionStatusOutput(AlexaContract):
     execution_environment: Literal["demo_simulation"]
     provider_mode: ProviderMode
     lifecycle_state: LifecycleStateValue
+    resolution_type: ResolutionTypeValue
     is_terminal: bool
+    last_checked_at: str | None
+    next_check_at: str | None
+    check_count: int
+    max_checks: int
+    resolved_at: str | None
     confirmation_required: bool
     execution_status: ExecutionStatus
     verification_status: VerificationStatus
@@ -55,6 +64,7 @@ class ResolutionStatusOutput(AlexaContract):
     created_at: str
     updated_at: str
     confirmed_at: str | None
+    resolution_reason: str | None
 
 
 class ExecutionClaimOutput(AlexaContract):
@@ -64,6 +74,7 @@ class ExecutionClaimOutput(AlexaContract):
     provider_reported_success: bool
     message: str
     observed_at: str
+    target_digest: str | None
 
 
 class IndependentReadBackOutput(AlexaContract):
@@ -74,6 +85,8 @@ class IndependentReadBackOutput(AlexaContract):
     effective_end_date: str | None
     freshness_seconds: int | None
     observed_at: str
+    target_digest: str | None
+    attempt_id: str | None
 
 
 class VerificationOutput(AlexaContract):
@@ -87,6 +100,33 @@ class VerificationOutput(AlexaContract):
 class StateTransitionOutput(AlexaContract):
     state: LifecycleStateValue
     occurred_at: str
+
+
+class HistoricalReadBackOutput(AlexaContract):
+    account_readable: bool
+    auto_renew: bool | None
+    effective_end_date: str | None
+    freshness_seconds: int | None
+    target_digest: str | None
+    attempt_id: str | None
+
+
+class VerificationAttemptOutput(AlexaContract):
+    checked_at: str
+    evidence: HistoricalReadBackOutput
+    verdict: VerdictValue
+    consumer_state: ConsumerStateValue
+    reason: str
+    attempt_id: str
+    check_count: int
+    terminal_failure_eligible: bool
+
+
+class ResourceIdentityOutput(AlexaContract):
+    provider: str
+    account_subject: str
+    resource_id: str
+    target_digest: str
 
 
 class ResolutionEvidenceOutput(AlexaContract):
@@ -106,7 +146,13 @@ class ResolutionEvidenceOutput(AlexaContract):
     independent_read_back: IndependentReadBackOutput | None
     verification: VerificationOutput | None
     state_history: list[StateTransitionOutput]
+    verification_history: list[VerificationAttemptOutput]
+    target_identity: ResourceIdentityOutput
 
 
 class OpenResolutionsOutput(AlexaContract):
+    resolutions: list[ResolutionStatusOutput]
+
+
+class RecentResolutionsOutput(AlexaContract):
     resolutions: list[ResolutionStatusOutput]

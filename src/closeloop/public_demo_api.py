@@ -24,12 +24,15 @@ from .confirmation import (
 )
 from .demo_provider import DemoProvider
 from .lifecycle import ResolutionService
+from .models import ActionReceipt, CancellationEvidence, ResourceIdentity
 from .repository import SqlResolutionRepository
 
 
-PUBLIC_DEMO_RESULT_SCHEMA = "closeloop.public-demo-result/v1"
-PUBLIC_DEMO_SCENARIOS = frozenset({"healthy", "false_success", "evidence_outage"})
-PUBLIC_DEMO_INTENT = "Cancel my subscription and make sure I will not be charged again."
+PUBLIC_DEMO_RESULT_SCHEMA = "closeloop.public-demo-result/v2"
+PUBLIC_DEMO_SCENARIOS = frozenset(
+    {"healthy", "false_success", "evidence_outage", "persistent_resolution", "terminal_failure"}
+)
+PUBLIC_DEMO_INTENT = "Cancel StreamBox before Friday and make sure it actually happens."
 PUBLIC_DEMO_MAX_BODY_BYTES = 96
 PUBLIC_DEMO_MAX_CONCURRENCY = 4
 PUBLIC_DEMO_TIMEOUT_SECONDS = 5.0
@@ -43,25 +46,22 @@ _RESPONSE_HEADERS = {
 }
 _PRESENTATION_SUMMARIES = {
     "PASS": (
-        "In this isolated simulation, the server-side verifier confirmed that the simulated "
-        "subscription is canceled: auto-renew is off and an effective billing end date is visible."
+        "In this isolated simulation, independent evidence confirms auto-renew is off "
+        "and the effective billing end date is visible."
     ),
     "FAIL": (
-        "In this isolated simulation, the provider reported success, but independent read-back "
-        "shows auto-renew is still enabled. CloseLoop therefore reports that the task is not done."
+        "Fresh account evidence still shows auto-renew enabled after the bounded "
+        "verification window. CloseLoop reports cancellation was not completed."
     ),
-    "INCONCLUSIVE": (
-        "In this isolated simulation, the cancellation may have run, but the account state could "
-        "not be read independently. CloseLoop will not turn missing evidence into a success claim."
-    ),
+    "INCONCLUSIVE": "The request was sent, but CloseLoop cannot verify the result yet.",
 }
 _PRESENTATION_NEXT_STEPS = {
     "PASS": "The isolated demo requires no further action.",
-    "FAIL": "The simulated task was not completed; rerun the demo only if you want to try again.",
-    "INCONCLUSIVE": "The simulated proof is unavailable; rerun the demo to check again.",
+    "FAIL": "In this simulation, the resolution needs attention; CloseLoop did not mark it complete.",
+    "INCONCLUSIVE": "In this simulation, the resolution stays open for a later explicit recheck.",
 }
 
-DemoScenario = Literal["healthy", "false_success", "evidence_outage"]
+DemoScenario = Literal["healthy", "false_success", "evidence_outage", "persistent_resolution", "terminal_failure"]
 DemoVerdict = Literal["PASS", "FAIL", "INCONCLUSIVE"]
 DemoConsumerState = Literal["Verified", "Not completed", "Awaiting proof"]
 DemoLifecycleState = Literal["VERIFIED", "NOT_COMPLETED", "AWAITING_PROOF"]
@@ -76,11 +76,17 @@ class PublicDemoResolution(_StrictResponseModel):
     action: Literal["cancel_subscription"]
     action_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     lifecycle_state: DemoLifecycleState
+    is_terminal: bool
+    next_check_at: str | None
+    last_checked_at: str | None
+    check_count: int
+    max_checks: int
+    resolved_at: str | None
     requested_at: str = Field(min_length=1, max_length=64)
     confirmed_at: str = Field(min_length=1, max_length=64)
     executing_at: str = Field(min_length=1, max_length=64)
     verifying_at: str = Field(min_length=1, max_length=64)
-    completed_at: str = Field(min_length=1, max_length=64)
+    completed_at: str | None
 
 
 class PublicDemoExecutionClaim(_StrictResponseModel):
@@ -119,7 +125,7 @@ class PublicDemoDisclosure(_StrictResponseModel):
 
 
 class PublicDemoResult(_StrictResponseModel):
-    schema_version: Literal["closeloop.public-demo-result/v1"]
+    schema_version: Literal["closeloop.public-demo-result/v2"]
     server_generated: Literal[True]
     scenario: DemoScenario
     resolution: PublicDemoResolution
@@ -129,6 +135,8 @@ class PublicDemoResult(_StrictResponseModel):
     summary: str = Field(min_length=1, max_length=500)
     recommended_next_step: str = Field(min_length=1, max_length=500)
     disclosure: PublicDemoDisclosure
+    lifecycle_story: list[dict[str, object]] = Field(default_factory=list)
+    verification_history: list[dict[str, object]] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def terminal_tuple_is_consistent(self) -> PublicDemoResult:
@@ -158,6 +166,8 @@ class PublicDemoRunner:
     def run(self, scenario: DemoScenario) -> PublicDemoResult:
         if scenario not in PUBLIC_DEMO_SCENARIOS:
             raise ValueError("unsupported public demo scenario")
+        if scenario == "persistent_resolution":
+            return _run_persistent_resolution_demo()
 
         owner_id = f"public-demo:{uuid4()}"
         secret = secrets.token_urlsafe(48)
@@ -187,11 +197,149 @@ class PublicDemoRunner:
                 True,
                 confirmation_attestation=attestation,
             )
+            if scenario == "terminal_failure":
+                while status["lifecycle_state"] == "AWAITING_PROOF":
+                    due = datetime.fromisoformat(
+                        str(status["next_check_at"]).replace("Z", "+00:00")
+                    )
+                    status = service.recheck_resolution(
+                        owner_id,
+                        str(started["resolution_id"]),
+                        scheduled_for=due,
+                        now=due,
+                    )
             evidence = service.get_resolution_evidence(
                 owner_id, str(started["resolution_id"])
             )
 
         return _presentation_result(scenario, status, evidence)
+
+
+class _PersistentJourneyProvider:
+    def __init__(self) -> None:
+        self.reads = 0
+
+    def cancel_subscription(self, target: ResourceIdentity) -> ActionReceipt:
+        return ActionReceipt("demo-request-1", True, "Cancellation accepted", target.target_digest)
+
+    def read_cancellation_evidence(
+        self, target: ResourceIdentity, attempt_id: str
+    ) -> CancellationEvidence:
+        self.reads += 1
+        if self.reads == 1:
+            return CancellationEvidence(
+                True, True, None, 0, target.target_digest, attempt_id
+            )
+        return CancellationEvidence(
+            True, False, "2026-10-03", 0, target.target_digest, attempt_id
+        )
+
+
+def _run_persistent_resolution_demo() -> PublicDemoResult:
+    owner_id = f"public-demo:{uuid4()}"
+    secret = secrets.token_urlsafe(48)
+    verifier = HmacJwtConfirmationAttestationVerifier(
+        secret=secret,
+        issuer=_DEMO_CONFIRMATION_ISSUER,
+        audience=_DEMO_CONFIRMATION_AUDIENCE,
+    )
+    provider = _PersistentJourneyProvider()
+    story: list[dict[str, object]] = [
+        {
+            "scene": "DELEGATION",
+            "session": "Day 1",
+            "lifecycle_state": "AWAITING_CONFIRMATION",
+            "summary": "Alexa+ asks for confirmation before any cancellation action.",
+        }
+    ]
+    with TemporaryDirectory(prefix="closeloop-public-demo-") as directory:
+        database = Path(directory) / "resolution.db"
+        repository = SqlResolutionRepository(f"sqlite+pysqlite:///{database}")
+        factory = lambda _mode: provider
+        service = ResolutionService(
+            repository=repository,
+            provider_factory=factory,
+            confirmation_verifier=verifier,
+        )
+        started = service.start_resolution(owner_id, PUBLIC_DEMO_INTENT, "false_success")
+        attestation = _mint_ephemeral_demo_confirmation(
+            started=started,
+            owner_id=owner_id,
+            secret=secret,
+        )
+        status = service.confirm_resolution_action(
+            owner_id,
+            str(started["resolution_id"]),
+            True,
+            confirmation_attestation=attestation,
+        )
+        evidence = service.get_resolution_evidence(owner_id, str(started["resolution_id"]))
+        story.append(
+            {
+                "scene": "EXECUTION",
+                "session": "Day 1",
+                "lifecycle_state": "VERIFYING",
+                "provider_reported_success": evidence["execution_claim"]["provider_reported_success"],
+                "summary": "StreamBox accepted the request. CloseLoop is checking the account; acceptance is not resolution.",
+            }
+        )
+        story.append(
+            {
+                "scene": "FALSE_SUCCESS",
+                "session": "Day 1",
+                "lifecycle_state": status["lifecycle_state"],
+                "summary": "StreamBox accepted the cancellation request, but auto-renew is still on. I’m not marking this resolved yet.",
+                "auto_renew": evidence["independent_read_back"]["auto_renew"],
+            }
+        )
+
+        # A separate service instance simulates a later conversational session.
+        service = ResolutionService(
+            repository=SqlResolutionRepository(f"sqlite+pysqlite:///{database}"),
+            provider_factory=factory,
+            confirmation_verifier=verifier,
+        )
+        resumed = service.get_resolution_status(owner_id, str(started["resolution_id"]))
+        story.append(
+            {
+                "scene": "PERSISTENCE",
+                "session": "Later session",
+                "resolution_id": resumed["resolution_id"],
+                "lifecycle_state": resumed["lifecycle_state"],
+                "next_check_at": resumed["next_check_at"],
+                "summary": "What happened with StreamBox? CloseLoop retrieved the same open resolution.",
+            }
+        )
+        due = datetime.fromisoformat(str(resumed["next_check_at"]).replace("Z", "+00:00"))
+        status = service.recheck_resolution(
+            owner_id,
+            str(started["resolution_id"]),
+            scheduled_for=due,
+            now=due,
+        )
+        evidence = service.get_resolution_evidence(owner_id, str(started["resolution_id"]))
+        story.extend(
+            [
+                {
+                    "scene": "RECHECK",
+                    "session": "Later session",
+                    "resolution_id": status["resolution_id"],
+                    "lifecycle_state": status["lifecycle_state"],
+                    "last_checked_at": status["last_checked_at"],
+                    "summary": "Independent read-back now finds auto-renew off and an effective end date.",
+                },
+                {
+                    "scene": "FINAL_ANSWER",
+                    "session": "Later session",
+                    "lifecycle_state": status["lifecycle_state"],
+                    "effective_end_date": evidence["independent_read_back"]["effective_end_date"],
+                    "summary": "It’s verified canceled now. Auto-renew is off and your access ends October 3.",
+                },
+            ]
+        )
+        return _presentation_result(
+            "persistent_resolution", status, evidence, story
+        )
 
 
 def _mint_ephemeral_demo_confirmation(
@@ -236,6 +384,7 @@ def _presentation_result(
     scenario: DemoScenario,
     status: dict[str, object],
     evidence: dict[str, object],
+    lifecycle_story: list[dict[str, object]] | None = None,
 ) -> PublicDemoResult:
     execution = evidence.get("execution_claim")
     read_back = evidence.get("independent_read_back")
@@ -256,11 +405,17 @@ def _presentation_result(
             "action": evidence["action"],
             "action_digest": evidence["action_digest"],
             "lifecycle_state": completed_state,
+            "is_terminal": status["is_terminal"],
+            "next_check_at": status["next_check_at"],
+            "last_checked_at": status["last_checked_at"],
+            "check_count": status["check_count"],
+            "max_checks": status["max_checks"],
+            "resolved_at": status["resolved_at"],
             "requested_at": _transition_time(evidence, "REQUESTED"),
             "confirmed_at": status["confirmed_at"],
             "executing_at": _transition_time(evidence, "EXECUTING"),
             "verifying_at": _transition_time(evidence, "VERIFYING"),
-            "completed_at": _transition_time(evidence, completed_state),
+            "completed_at": status["resolved_at"],
         },
         "execution_claim": {
             "source": execution["source"],
@@ -284,7 +439,14 @@ def _presentation_result(
             "reason": verification["reason"],
             "evaluated_at": verification["evaluated_at"],
         },
-        "summary": _PRESENTATION_SUMMARIES[str(verification["verdict"])],
+        "summary": (
+            "The cancellation request was accepted, but auto-renew is still on. "
+            "CloseLoop is not marking this resolved yet."
+            if verification["verdict"] == "INCONCLUSIVE"
+            and read_back["account_readable"] is True
+            and read_back["auto_renew"] is True
+            else _PRESENTATION_SUMMARIES[str(verification["verdict"])]
+        ),
         "recommended_next_step": _PRESENTATION_NEXT_STEPS[
             str(verification["verdict"])
         ],
@@ -297,7 +459,20 @@ def _presentation_result(
             "live_aws": False,
             "production_action": False,
         },
+        "lifecycle_story": lifecycle_story or [],
+        "verification_history": evidence["verification_history"],
     }
+    if lifecycle_story is None and scenario == "evidence_outage":
+        lifecycle_story = [
+            {
+                "scene": "UNCERTAINTY",
+                "session": "Simulated check",
+                "lifecycle_state": status["lifecycle_state"],
+                "next_check_at": status["next_check_at"],
+                "summary": "The request was sent, but independent account evidence is unavailable. The resolution remains open as Awaiting proof.",
+            }
+        ]
+        payload["lifecycle_story"] = lifecycle_story
     return PublicDemoResult.model_validate(payload)
 
 

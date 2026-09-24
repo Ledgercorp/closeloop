@@ -81,7 +81,7 @@ def test_resolution_survives_repository_and_service_reinstantiation(tmp_path):
 @pytest.mark.parametrize(
     ("provider_mode", "verdict", "consumer_state"),
     [
-        ("false_success", "FAIL", "Not completed"),
+        ("false_success", "INCONCLUSIVE", "Awaiting proof"),
         ("evidence_outage", "INCONCLUSIVE", "Awaiting proof"),
     ],
 )

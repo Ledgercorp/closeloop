@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from threading import Event, Thread
 
@@ -40,7 +39,8 @@ def make_client(**kwargs) -> TestClient:
     ("scenario", "verdict", "consumer_state", "lifecycle_state"),
     [
         ("healthy", "PASS", "Verified", "VERIFIED"),
-        ("false_success", "FAIL", "Not completed", "NOT_COMPLETED"),
+        ("terminal_failure", "FAIL", "Not completed", "NOT_COMPLETED"),
+        ("false_success", "INCONCLUSIVE", "Awaiting proof", "AWAITING_PROOF"),
         (
             "evidence_outage",
             "INCONCLUSIVE",
@@ -57,14 +57,23 @@ def test_public_demo_runs_real_server_lifecycle(
 
     assert response.status_code == 200
     result = response.json()
-    assert result["schema_version"] == "closeloop.public-demo-result/v1"
+    assert result["schema_version"] == "closeloop.public-demo-result/v2"
     assert result["server_generated"] is True
     assert result["scenario"] == scenario
     assert result["verification"]["verdict"] == verdict
     assert result["verification"]["consumer_state"] == consumer_state
     assert result["resolution"]["lifecycle_state"] == lifecycle_state
     assert result["execution_claim"]["provider_reported_success"] is True
-    assert result["summary"].startswith("In this isolated simulation,")
+    assert result["summary"]
+    if scenario == "false_success":
+        assert "request was accepted" in result["summary"]
+        assert "auto-renew is still on" in result["summary"]
+        assert result["resolution"]["lifecycle_state"] == "AWAITING_PROOF"
+    elif scenario == "terminal_failure":
+        assert "bounded verification window" in result["summary"]
+        assert result["resolution"]["check_count"] == result["resolution"]["max_checks"]
+    elif scenario == "evidence_outage":
+        assert "cannot verify" in result["summary"]
     assert "your subscription is canceled" not in result["summary"].lower()
     assert "simulat" in result["recommended_next_step"].lower() or "demo" in result[
         "recommended_next_step"
@@ -87,17 +96,17 @@ def test_false_success_is_decided_after_provider_and_readback(monkeypatch):
     original_read = DemoProvider.read_cancellation_evidence
     original_verify = lifecycle_module.verify_cancellation
 
-    def cancel(provider):
+    def cancel(provider, target):
         calls.append("provider")
-        return original_cancel(provider)
+        return original_cancel(provider, target)
 
-    def read(provider):
+    def read(provider, target, attempt_id):
         calls.append("readback")
-        return original_read(provider)
+        return original_read(provider, target, attempt_id)
 
-    def verify(receipt, evidence):
+    def verify(receipt, evidence, **kwargs):
         calls.append("verifier")
-        return original_verify(receipt, evidence)
+        return original_verify(receipt, evidence, **kwargs)
 
     monkeypatch.setattr(DemoProvider, "cancel_subscription", cancel)
     monkeypatch.setattr(DemoProvider, "read_cancellation_evidence", read)
@@ -109,7 +118,57 @@ def test_false_success_is_decided_after_provider_and_readback(monkeypatch):
     assert calls == ["provider", "readback", "verifier"]
     assert result["execution_claim"]["provider_reported_success"] is True
     assert result["independent_read_back"]["auto_renew"] is True
-    assert result["verification"]["verdict"] == "FAIL"
+    assert result["verification"]["verdict"] == "INCONCLUSIVE"
+    assert result["resolution"]["lifecycle_state"] == "AWAITING_PROOF"
+
+
+def test_persistent_demo_retrieves_and_resolves_same_record_in_later_session():
+    with make_client() as client:
+        response = client.post("/demo/run", json={"scenario": "persistent_resolution"})
+    assert response.status_code == 200
+    result = response.json()
+    scenes = result["lifecycle_story"]
+    assert [scene["scene"] for scene in scenes] == [
+        "DELEGATION",
+        "EXECUTION",
+        "FALSE_SUCCESS",
+        "PERSISTENCE",
+        "RECHECK",
+        "FINAL_ANSWER",
+    ]
+    assert scenes[1]["lifecycle_state"] == "VERIFYING"
+    assert scenes[1]["provider_reported_success"] is True
+    assert scenes[2]["lifecycle_state"] == "AWAITING_PROOF"
+    assert scenes[2]["auto_renew"] is True
+    assert scenes[3]["lifecycle_state"] == "AWAITING_PROOF"
+    assert scenes[3]["next_check_at"]
+    assert scenes[3]["resolution_id"] == scenes[4]["resolution_id"]
+    assert result["resolution"]["lifecycle_state"] == "VERIFIED"
+    assert result["independent_read_back"]["auto_renew"] is False
+    assert result["independent_read_back"]["effective_end_date"] == "2026-10-03"
+    assert result["disclosure"]["live_aws"] is False
+    assert result["resolution"]["is_terminal"] is True
+    assert len(result["verification_history"]) == 2
+
+
+def test_public_demo_evidence_outage_story_stays_open_and_scheduled():
+    with make_client() as client:
+        result = client.post("/demo/run", json={"scenario": "evidence_outage"}).json()
+    scene = result["lifecycle_story"][0]
+    assert scene["scene"] == "UNCERTAINTY"
+    assert scene["lifecycle_state"] == "AWAITING_PROOF"
+    assert scene["next_check_at"]
+    assert "remains open" in scene["summary"]
+
+
+def test_demo_homepage_leads_with_resolution_story():
+    with make_client() as client:
+        response = client.get("/demo/")
+    assert response.status_code == 200
+    assert "Alexa+ · persistent resolution" in response.text
+    assert "Waiting for your confirmation. No cancellation request has been sent." in response.text
+    assert "Confirm and play the resolution" in response.text
+    assert "/demo/run" in response.text
 
 
 @pytest.mark.parametrize(
@@ -237,12 +296,20 @@ def test_public_demo_response_is_explicit_and_contains_no_capability_material():
         "summary",
         "recommended_next_step",
         "disclosure",
+        "lifecycle_story",
+        "verification_history",
     }
     assert set(result["resolution"]) == {
         "resolution_id",
         "action",
         "action_digest",
         "lifecycle_state",
+        "is_terminal",
+        "next_check_at",
+        "last_checked_at",
+        "check_count",
+        "max_checks",
+        "resolved_at",
         "requested_at",
         "confirmed_at",
         "executing_at",
@@ -318,35 +385,20 @@ def test_public_demo_timeout_and_saturation_fail_closed_without_queueing():
 
 def test_polished_browser_bundle_only_requests_scenario_and_has_no_verifier_logic():
     bundle = (
-        Path(__file__).parents[1] / "src" / "closeloop" / "public_demo" / "index.html"
+        Path(__file__).parents[1] / "src" / "closeloop" / "public_demo" / "resolution.html"
     ).read_text(encoding="utf-8")
-    match = re.search(
-        r'<script type="__bundler/template">\s*(.*?)\s*</script>', bundle, re.DOTALL
-    )
-    assert match is not None
-    template = json.loads(match.group(1))
-
-    assert "function runProvider" not in template
-    assert "function verifyCancellation" not in template
-    assert "MAX_EVIDENCE_AGE_SECONDS" not in template
-    assert 'const DEMO_API_PATH = "/demo/run"' in template
-    assert 'body: JSON.stringify({ scenario })' in template
-    assert 'body: JSON.stringify({ scenario, ' not in template
-    assert "parseDemoResponse" in template
-    assert "Validate the server contract without deriving a verdict from evidence" in template
-    assert 'phase: "requesting"' in template
-    response_validated_at = template.index("const value = response.data;")
-    confirmation_displayed_at = template.index(
-        'phase: "executing"', response_validated_at
-    )
-    assert confirmation_displayed_at > response_validated_at
-    pre_validation = template[template.index("confirm() {") : response_validated_at]
-    assert 'phase: "executing"' not in pre_validation
-    assert "confirmation: this.stamp()" not in pre_validation
-    assert "Confirmed — the action is running" not in template
-    assert "CloseLoop is executing the confirmed cancellation" not in template
-    assert "No confirmation, execution claim, or verdict is displayed" in template
-    assert "In this isolated simulation" not in pre_validation
-    assert 'statusLabel: error ? "Proof unavailable"' in template
-    assert "requestSerial !== this._requestSerial" in template
-    assert "this._active" in template
+    assert 'body: JSON.stringify({ scenario })' in bundle
+    assert 'fetch("/demo/run"' in bundle
+    assert "function verifyCancellation" not in bundle
+    assert "function runProvider" not in bundle
+    assert "textContent = JSON.stringify(result, null, 2)" in bundle
+    assert "innerHTML" not in bundle
+    assert "lifecycle_story" in bundle
+    assert "View evidence and provenance" in bundle
+    assert "Next check (simulated)" in bundle
+    assert 'AWAITING_PROOF: "Awaiting proof"' in bundle
+    assert 'VERIFYING: "Checking result"' in bundle
+    assert 'PERSISTENCE: "Still open"' in bundle
+    assert 'scene.lifecycle_state.replaceAll("_", " ")' not in bundle
+    assert 'confirmation.textContent = "Confirmation recorded for this isolated simulation."' in bundle
+    assert 'confirmation.textContent = "The local simulation could not be completed;' in bundle

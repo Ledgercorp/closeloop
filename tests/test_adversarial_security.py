@@ -62,19 +62,31 @@ class CountingProvider:
         self.read_count = 0
         self._lock = Lock()
 
-    def cancel_subscription(self):
+    def cancel_subscription(self, target):
         with self._lock:
             self.execution_count += 1
         if self.execution_error:
             raise self.execution_error
-        return self.receipt
+        return ActionReceipt(
+            self.receipt.request_id,
+            self.receipt.provider_reported_success,
+            self.receipt.message,
+            self.receipt.target_digest or target.target_digest,
+        )
 
-    def read_cancellation_evidence(self):
+    def read_cancellation_evidence(self, target, attempt_id):
         with self._lock:
             self.read_count += 1
         if self.evidence_error:
             raise self.evidence_error
-        return self.evidence
+        return CancellationEvidence(
+            self.evidence.account_readable,
+            self.evidence.auto_renew,
+            self.evidence.effective_end_date,
+            self.evidence.freshness_seconds,
+            target.target_digest,
+            attempt_id,
+        )
 
 
 def make_service(tmp_path, provider: CountingProvider | None = None, name="security.db"):

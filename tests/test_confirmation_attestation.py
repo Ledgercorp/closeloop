@@ -38,16 +38,16 @@ class CountingProvider:
     def __init__(self) -> None:
         self.execution_count = 0
 
-    def cancel_subscription(self):
+    def cancel_subscription(self, target):
         from closeloop.models import ActionReceipt
 
         self.execution_count += 1
-        return ActionReceipt("confirmed-action", True, "Cancellation accepted")
+        return ActionReceipt("confirmed-action", True, "Cancellation accepted", target.target_digest)
 
-    def read_cancellation_evidence(self):
+    def read_cancellation_evidence(self, target, attempt_id):
         from closeloop.models import CancellationEvidence
 
-        return CancellationEvidence(True, False, "2026-09-30", 0)
+        return CancellationEvidence(True, False, "2026-09-30", 0, target.target_digest, attempt_id)
 
 
 def make_service(tmp_path, provider=None, name="confirmation.db"):

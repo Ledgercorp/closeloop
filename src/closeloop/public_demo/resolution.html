@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CloseLoop · Alexa+ resolution demo</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.5 system-ui, sans-serif; color: #18332b; background: #f4f8f5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 860px; margin: 0 auto; padding: 48px 22px 72px; }
+    .eyebrow { color: #34745a; font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { max-width: 700px; margin: 12px 0; font-size: clamp(2.1rem, 6vw, 3.4rem); line-height: 1.08; }
+    .lede { max-width: 650px; color: #435d53; font-size: 1.15rem; }
+    .request, .notice, .scene, .outcome { border: 1px solid #d7e4dc; border-radius: 16px; background: white; padding: 20px; }
+    .request { margin: 26px 0 16px; font-size: 1.15rem; font-weight: 650; }
+    .notice { background: #edf5f0; color: #405a50; font-size: .92rem; }
+    button { margin: 16px 8px 8px 0; padding: 12px 18px; border: 0; border-radius: 999px; background: #176b4d; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #e5eee9; color: #18332b; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #message { min-height: 1.5em; color: #435d53; }
+    #story { display: grid; gap: 12px; margin-top: 20px; }
+    .scene h2 { margin: 0 0 6px; font-size: 1rem; }
+    .scene p { margin: 0; }
+    .tag { color: #557366; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .outcome { margin-top: 18px; border-left: 5px solid #176b4d; }
+    details { margin-top: 18px; }
+    pre { overflow: auto; padding: 16px; border-radius: 12px; background: #10251f; color: #e1f1e8; font-size: .8rem; }
+    a { color: #176b4d; }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Alexa+ · persistent resolution</div>
+  <h1>CloseLoop stays with the outcome.</h1>
+  <p class="lede">Alexa+ can take the action. CloseLoop keeps checking until independent evidence shows what actually happened.</p>
+  <div class="request">“Alexa, cancel StreamBox before Friday and make sure it actually happens.”</div>
+  <div class="notice"><strong>Local simulation.</strong> The demo runs the real CloseLoop lifecycle against a simulated provider and a temporary SQLite store. It recreates a later session and clock advance; it does not call Alexa+, a subscription provider, or live AWS.</div>
+  <p class="notice" id="confirmation">Waiting for your confirmation. No cancellation request has been sent.</p>
+  <button id="run">Confirm and play the resolution</button>
+  <button id="failure" class="secondary">See a verified not completed outcome</button>
+  <button id="outage" class="secondary">See when proof is unavailable</button>
+  <p id="message" role="status" aria-live="polite"></p>
+  <section id="story" aria-label="Resolution timeline"></section>
+  <section id="outcome" class="outcome" hidden aria-live="polite"></section>
+  <details id="proof" hidden>
+    <summary>View evidence and provenance</summary>
+    <pre id="proof-data"></pre>
+  </details>
+  <p><a href="/demo/index.html">Open the technical evidence demo</a></p>
+</main>
+<script>
+const message = document.querySelector("#message");
+const story = document.querySelector("#story");
+const outcome = document.querySelector("#outcome");
+const proof = document.querySelector("#proof");
+const confirmation = document.querySelector("#confirmation");
+const buttons = [...document.querySelectorAll("button")];
+async function run(scenario) {
+ buttons.forEach((button) => { button.disabled = true; });
+ confirmation.textContent = "Confirmation submitted. Running the isolated simulation.";
+  message.textContent = "CloseLoop is following the resolution…";
+  story.replaceChildren(); outcome.hidden = true; proof.hidden = true;
+  try {
+    const response = await fetch("/demo/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario }),
+    });
+ const result = await response.json();
+ if (!response.ok) throw new Error(result.message || "The demo could not run.");
+ confirmation.textContent = "Confirmation recorded for this isolated simulation.";
+    const sceneLabels = {
+      DELEGATION: "Your request",
+      EXECUTION: "Request sent",
+      FALSE_SUCCESS: "Checking the result",
+      PERSISTENCE: "Still open",
+      RECHECK: "Checking again",
+      FINAL_ANSWER: "Resolution",
+      UNCERTAINTY: "Evidence unavailable"
+    };
+    const statusLabels = {
+      AWAITING_CONFIRMATION: "Waiting for confirmation",
+      VERIFYING: "Checking result",
+      AWAITING_PROOF: "Awaiting proof",
+      VERIFIED: "Verified",
+      NOT_COMPLETED: "Not completed"
+    };
+    for (const scene of result.lifecycle_story || []) {
+      const card = document.createElement("article"); card.className = "scene";
+      const label = document.createElement("div"); label.className = "tag";
+      label.textContent = `${scene.session} · ${sceneLabels[scene.scene] || "Resolution update"}`;
+      const heading = document.createElement("h2"); heading.textContent = statusLabels[scene.lifecycle_state] || "Status unavailable";
+      const text = document.createElement("p"); text.textContent = scene.summary;
+      card.append(label, heading, text);
+      if (typeof scene.next_check_at === "string") {
+        const nextCheck = document.createElement("p");
+        nextCheck.textContent = `Next check (simulated): ${new Intl.DateTimeFormat(undefined, {
+          dateStyle: "medium", timeStyle: "short"
+        }).format(new Date(scene.next_check_at))}`;
+        card.append(nextCheck);
+      }
+      story.append(card);
+    }
+    const status = result.resolution.lifecycle_state;
+    outcome.hidden = false;
+    outcome.textContent = status === "VERIFIED" ? result.lifecycle_story.at(-1).summary
+      : status === "AWAITING_PROOF" ? "The request was sent, but CloseLoop still can’t verify the result. The resolution remains open."
+      : result.summary;
+    proof.hidden = false;
+    document.querySelector("#proof-data").textContent = JSON.stringify(result, null, 2);
+    message.textContent = status === "VERIFIED" ? "Resolved with independent proof." : "Still waiting for proof.";
+ } catch (error) { confirmation.textContent = "The local simulation could not be completed; no production subscription action was taken."; message.textContent = error.message; }
+  finally { buttons.forEach((button) => { button.disabled = false; }); }
+}
+document.querySelector("#run").addEventListener("click", () => run("persistent_resolution"));
+document.querySelector("#failure").addEventListener("click", () => run("terminal_failure"));
+document.querySelector("#outage").addEventListener("click", () => run("evidence_outage"));
+</script>
+</body>
+</html>

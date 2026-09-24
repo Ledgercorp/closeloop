@@ -2,29 +2,26 @@
 
 ## Implemented architecture
 
+CloseLoop is a persistent responsibility layer for Alexa+ delegated outcomes. Subscription cancellation is the sole executable workflow. `ResolutionType` also models REFUND, RETURN, WARRANTY_CLAIM, SERVICE_REQUEST, and APPOINTMENT for future contracts; those integrations are roadmap only.
+
 ```text
-MCP client (Alexa+ target)
-  ↓ bearer-authenticated Streamable HTTP
-CloseLoop MCP server (five tools)
-  ↓ trusted action-bound confirmation
-Demo provider action → action receipt (claim)
-  ↓
-Independent provider read-back → resulting-state evidence
-  ↓
-Deterministic verifier
-  ↓
-PASS / FAIL / INCONCLUSIVE
-  ↓
-Verified / Not completed / Awaiting proof
-  ├─ conversation-ready structured/text result
-  ├─ read-only MCP Apps proof card
-  └─ SQL or optional DynamoDB lifecycle/evidence persistence
+Alexa+ / authenticated MCP
+        │ create, confirm, retrieve, recheck
+        ▼
+Owner-scoped ResolutionRecord (SQL or DynamoDB)
+  intent · lifecycle · action claim · state history
+  last/next check · bounded count · evidence-attempt history
+        │
+        ├── cancellation provider action (receipt is a claim)
+        ├── independent account read-back (fresh evidence)
+        └── deterministic cancellation verifier
+                 PASS / FAIL / INCONCLUSIVE
+                 Verified / Not completed / Awaiting proof
+
+AWAITING_PROOF stays open → bounded recheck → immutable terminal outcome
 ```
 
-The provider is a labeled local simulation. DynamoDB is implemented but Moto-simulated; Alexa+
-contracts are locally integration verified without a live Alexa+ host. Bedrock, AgentCore, Strands,
-Lambda, Step Functions, and EventBridge are not implemented and are not part of the submission
-architecture.
+SQL and DynamoDB persist the same record contract; version and state conditions serialize updates. An inconclusive result appends evidence history and schedules an explicit bounded next check. `recheck_resolution` only reads evidence and never repeats the provider action. The demo advances simulated time and recreates a service instance over SQLite; it does not implement a production scheduler. DynamoDB behavior is Moto-tested, not live AWS-tested. Alexa+ is locally MCP-compatible, not live Alexa+-tested.
 
 ## MCP tools
 
@@ -32,18 +29,22 @@ architecture.
 - `confirm_resolution_action`
 - `get_resolution_status`
 - `get_resolution_evidence`
-- `list_open_resolutions`
+- `list_open_resolutions` (unresolved work only)
+- `list_recent_resolutions` (bounded owner-scoped terminal history)
+- `recheck_resolution` (explicit follow-up observation; no action replay)
 
-There will be no `set_verdict` tool.
+The owner-scoped resolution list is authoritative cross-session memory. Status returns action outcome, verifier state, last/next check time, attempts, and consumer-safe explanation. There is no agent-controlled verdict tool.
 
 ## Milestone 2 implementation
 
-The five tools above are implemented as a Streamable HTTP MCP service mounted at `/mcp`
+The seven tools above are implemented as a Streamable HTTP MCP service mounted at `/mcp`
 inside the existing FastAPI application. The current lifecycle is:
 
 ```text
 REQUESTED -> AWAITING_CONFIRMATION -> EXECUTING -> VERIFYING
-  -> VERIFIED | NOT_COMPLETED | AWAITING_PROOF
+VERIFYING -> VERIFIED | NOT_COMPLETED
+          \-> AWAITING_PROOF -> VERIFYING (bounded recheck)
+          \-> VERIFYING (bounded recovery after interrupted read-back)
 ```
 
 `start_resolution` stops at `AWAITING_CONFIRMATION`. Only
@@ -83,7 +84,7 @@ is kept at the contract edge:
 ```text
 MCP client (Alexa+ target) -> protected-resource discovery -> bearer-authenticated /mcp
                                                      |
-                 trusted confirmation attestation -> closed schemas + five tools
+trusted confirmation attestation -> closed schemas + seven tools
                                                      |
                     lifecycle service -> deterministic verifier
                                                      |
@@ -133,3 +134,11 @@ No AWS orchestration or model service was added. The current lifecycle is synchr
 has an MCP runtime, authenticated tool boundary, and deterministic verifier. DynamoDB supplies the
 missing shared serverless state capability; additional AWS control planes would add complexity
 without a current consumer benefit.
+
+## Persistent resolution lifecycle (2026-09-24)
+
+`AWAITING_PROOF` is now an open state, not a terminal outcome. `ResolutionRecord` persists the modeled resolution type, last and next check time, bounded check count, final resolution time/reason, and historical independent evidence/results. Old SQL tables receive additive nullable columns on schema initialization; older records are read with cancellation defaults. DynamoDB mappings use the same serialized record contract. `VERIFIED` and `NOT_COMPLETED` remain immutable.
+
+A recheck claims `VERIFYING` through an owner/version/state-conditional save before read-back. Scheduled calls must present the exact `next_check_at` token; duplicate or stale schedules fail. User-triggered MCP rechecks may bypass the wait time but not the attempt budget. Rechecks call only the independent provider read path. A stale `VERIFYING` record can be resumed after five minutes without replaying the original action. Four total observations are allowed, including the initial check; exhaustion leaves the task open with no next scheduled attempt.
+
+The public journey uses a temporary SQLite file and a second service instance to demonstrate persistence across an explicitly simulated session boundary. Time advancement and provider-state change are deterministic demo behavior. No production scheduler or worker is present.

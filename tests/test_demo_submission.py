@@ -23,9 +23,9 @@ def test_submission_demo_builds_real_canonical_outcomes_and_recording_index(tmp_
             "verdict": "INCONCLUSIVE",
         },
         "false_success": {
-            "consumer_state": "Not completed",
-            "lifecycle_state": "NOT_COMPLETED",
-            "verdict": "FAIL",
+            "consumer_state": "Awaiting proof",
+            "lifecycle_state": "AWAITING_PROOF",
+            "verdict": "INCONCLUSIVE",
         },
         "healthy": {
             "consumer_state": "Verified",

@@ -10,7 +10,7 @@ artifact.
 | Requirement | CloseLoop evidence | Repository/demo proof | Strength | Limitation |
 |---|---|---|---|---|
 | Alexa+ primary track | Self-hosted MCP server using Streamable HTTP and MCP 2025-11-25 | `src/closeloop/mcp_server.py`; `tests/test_alexa_integration.py`; 2:25 video | Strong local integration | No live Alexa+ client, add-on, Local Inspector, or account linking |
-| Runtime technology use | Official MCP Python SDK is imported and executes the five-tool lifecycle | `pyproject.toml`; `src/closeloop/mcp_server.py`; public server-backed demo | Strong local integration plus public deterministic demo | Public demo is isolated simulation; live MCP actions remain authenticated and are not publicly exercised |
+| Runtime technology use | Official MCP Python SDK is imported and executes the seven-tool persistent lifecycle | `pyproject.toml`; `src/closeloop/mcp_server.py`; public server-backed demo | Strong local integration plus public deterministic demo | Public demo is isolated simulation; live MCP actions remain authenticated and are not publicly exercised |
 | Working demonstration | Confirmation plus PASS/FAIL/INCONCLUSIVE are generated through the deployed real lifecycle/provider/read-back/verifier path | `src/closeloop/public_demo_api.py`; `/demo/`; 0:20–2:25 video | Strong, public, and reproducible | Demo provider and confirmation are labeled simulations |
 | Public source and setup | Public GitHub repository, canonical Apache-2.0, quick-start commands | `README.md`; `LICENSE` | Strong; anonymous access and GitHub license detection verified | Public video remains a manual submission step |
 | Hackathon provenance | New CloseLoop code is separated from prior CUF concepts | `docs/build-provenance.md`; README provenance | Explicit | Prior conceptual experience is disclosed, not claimed as new |
@@ -37,11 +37,11 @@ the synchronous demo.
 
 ## Highest-value judging moments
 
-1. **First 10 seconds:** “A tool saying success is not proof.”
+1. **First 10 seconds:** “Alexa+ does not just take the action. CloseLoop owns the outcome until it is resolved.”
 2. **0:45:** execution claim and independent evidence visibly separated.
-3. **1:35:** provider says success while CloseLoop says Not completed.
+3. **1:35:** provider says success, auto-renew is still on, and CloseLoop keeps the same resolution open.
 4. **2:05:** evidence outage becomes Awaiting proof, never invented certainty.
-5. **2:25:** five-tool MCP, deterministic verifier, trusted confirmation, and meaningful DynamoDB.
+5. **2:25:** seven-tool MCP, deterministic verifier, trusted confirmation, and DynamoDB-backed record contract (Moto-tested).
 
 ## Submission risk
 

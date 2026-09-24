@@ -21,6 +21,8 @@ EXPECTED_TOOLS = {
     "get_resolution_status",
     "get_resolution_evidence",
     "list_open_resolutions",
+    "recheck_resolution",
+    "list_recent_resolutions",
 }
 FORBIDDEN_TOOLS = {"set_verdict", "mark_success", "force_pass"}
 INTENT = "Cancel my subscription and make sure I will not be charged again."
@@ -199,9 +201,67 @@ def test_mcp_rejects_direct_verdict_override_without_executing(tmp_path):
                     ),
                 },
             )
-            assert completed_result.structured_content["verdict"] == "FAIL"
+            assert completed_result.structured_content["verdict"] == "INCONCLUSIVE"
 
     asyncio.run(attempt_override())
+
+
+def test_mcp_keeps_false_success_open_and_supports_later_recheck(tmp_path):
+    async def continue_resolution():
+        service = make_service(tmp_path)
+        server = create_mcp_server(service, principal_resolver=lambda: OWNER_A)
+        async with Client(server, raise_exceptions=False) as client:
+            started = await client.call_tool(
+                "start_resolution", {"intent": INTENT, "provider_mode": "false_success"}
+            )
+            resolution_id = started.structured_content["resolution_id"]
+            confirmed = await client.call_tool(
+                "confirm_resolution_action",
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": True,
+                    "confirmation_attestation": trusted_confirmation(
+                        started.structured_content, OWNER_A
+                    ),
+                },
+            )
+            assert confirmed.structured_content["lifecycle_state"] == "AWAITING_PROOF"
+            assert confirmed.structured_content["is_terminal"] is False
+            pending = await client.call_tool("list_open_resolutions", {})
+            assert pending.structured_content["resolutions"][0]["resolution_id"] == resolution_id
+            checked = await client.call_tool("recheck_resolution", {"resolution_id": resolution_id})
+            assert checked.structured_content["lifecycle_state"] == "AWAITING_PROOF"
+            assert checked.structured_content["check_count"] == 2
+            assert checked.structured_content["is_terminal"] is False
+
+    asyncio.run(continue_resolution())
+
+
+def test_open_list_excludes_terminal_and_recent_list_is_owner_scoped(tmp_path):
+    async def retrieve_history():
+        service = make_service(tmp_path)
+        server = create_mcp_server(service, principal_resolver=lambda: OWNER_A)
+        async with Client(server, raise_exceptions=False) as client:
+            started = await client.call_tool(
+                "start_resolution", {"intent": INTENT, "provider_mode": "healthy"}
+            )
+            resolution_id = started.structured_content["resolution_id"]
+            await client.call_tool(
+                "confirm_resolution_action",
+                {
+                    "resolution_id": resolution_id,
+                    "confirmed": True,
+                    "confirmation_attestation": trusted_confirmation(
+                        started.structured_content, OWNER_A
+                    ),
+                },
+            )
+            opened = await client.call_tool("list_open_resolutions", {})
+            recent = await client.call_tool("list_recent_resolutions", {})
+            assert opened.structured_content["resolutions"] == []
+            assert recent.structured_content["resolutions"][0]["resolution_id"] == resolution_id
+
+    asyncio.run(retrieve_history())
 
 
 @pytest.mark.parametrize("protocol_version", ["2025-11-25", "2025-03-26"])
@@ -372,6 +432,7 @@ def test_public_demo_is_read_only_labeled_and_secret_free(tmp_path):
         index = client.get("/demo/")
         healthy = client.get("/demo/healthy.html")
         manifest = client.get("/demo/demo-results.json")
+        technical_demo = client.get("/demo/index.html")
         unauthorized_mcp = client.post(
             "/mcp",
             headers=protocol_headers(),
@@ -379,12 +440,16 @@ def test_public_demo_is_read_only_labeled_and_secret_free(tmp_path):
         )
 
     assert index.status_code == 200
-    assert "Verified demo experience" in index.text
-    assert "DEMO_API_PATH" in index.text
+    assert "persistent resolution" in index.text
+    assert "simulation" in index.text.lower()
+    assert '/demo/index.html' in index.text
     assert "/demo/run" in index.text
     assert "local-validation-only-confirmation-secret" not in index.text
     assert healthy.status_code == 200
     assert "CloseLoop proof card" in healthy.text
+    assert technical_demo.status_code == 200
+    assert "Public deterministic demonstration" in technical_demo.text
+    assert "CloseLoop MCP lifecycle" in technical_demo.text
     assert manifest.status_code == 200
     assert manifest.json()["live_alexa_plus"] is False
     assert manifest.json()["live_aws"] is False

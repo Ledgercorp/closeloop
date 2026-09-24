@@ -13,6 +13,7 @@ from pydantic import Field, StrictBool
 
 from .alexa_contracts import (
     OpenResolutionsOutput,
+    RecentResolutionsOutput,
     ProviderMode,
     ResolutionEvidenceOutput,
     ResolutionStatusOutput,
@@ -173,6 +174,15 @@ def create_mcp_server(
         )
         return ResolutionStatusOutput.model_validate(result)
 
+    def recheck_resolution(resolution_id: ResolutionId) -> ResolutionStatusOutput:
+        """Check independent evidence again for an unresolved task. This never repeats the action."""
+        result = _resolution_operation(
+            lambda: resolution_service.recheck_resolution(
+                principal_resolver(), resolution_id, force=True
+            )
+        )
+        return ResolutionStatusOutput.model_validate(result)
+
     def get_resolution_status(resolution_id: ResolutionId) -> ResolutionStatusOutput:
         """Read one resolution's complete conversation-ready status without changing it.
 
@@ -222,6 +232,17 @@ def create_mcp_server(
             lambda: resolution_service.list_open_resolutions(principal_resolver(), limit)
         )
         return OpenResolutionsOutput(resolutions=resolutions)
+
+    def list_recent_resolutions(
+        limit: Annotated[
+            int, Field(ge=1, le=100, description="Maximum number of recent terminal resolutions.")
+        ] = 10,
+    ) -> RecentResolutionsOutput:
+        """List this owner's recent terminal outcomes with final status and reason for later-session questions."""
+        resolutions = _resolution_operation(
+            lambda: resolution_service.list_recent_resolutions(principal_resolver(), limit)
+        )
+        return RecentResolutionsOutput(resolutions=resolutions)
 
     proof_card_meta: dict[str, object] = {
         "ui": {"resourceUri": PROOF_CARD_URI, "visibility": ["model", "app"]}
@@ -282,6 +303,27 @@ def create_mcp_server(
                 openWorldHint=False,
             ),
         ),
+        _strict_tool(
+            recheck_resolution,
+            ToolAnnotations(
+                title="Recheck resolution outcome",
+                readOnlyHint=False,
+                destructiveHint=False,
+                idempotentHint=False,
+                openWorldHint=True,
+            ),
+            meta=proof_card_meta,
+        ),
+        _strict_tool(
+            list_recent_resolutions,
+            ToolAnnotations(
+                title="List recent resolutions",
+                readOnlyHint=True,
+                destructiveHint=False,
+                idempotentHint=True,
+                openWorldHint=False,
+            ),
+        ),
     ]
     proof_card = create_proof_card_extension()
     return MCPServer(
@@ -296,4 +338,4 @@ def create_mcp_server(
         extensions=[proof_card],
         auth=auth_settings,
         token_verifier=token_verifier,
-    )
+        )

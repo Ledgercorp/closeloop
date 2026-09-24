@@ -30,7 +30,7 @@ OWNER_B = "owner-b"
 INTENT = "Cancel my subscription and make sure I will not be charged again."
 EXPECTED = {
     "healthy": ("PASS", "Verified", "VERIFIED"),
-    "false_success": ("FAIL", "Not completed", "NOT_COMPLETED"),
+    "false_success": ("INCONCLUSIVE", "Awaiting proof", "AWAITING_PROOF"),
     "evidence_outage": ("INCONCLUSIVE", "Awaiting proof", "AWAITING_PROOF"),
 }
 
@@ -65,7 +65,7 @@ async def completed_mcp_results(tmp_path, provider_mode):
 
 
 @pytest.mark.parametrize("provider_mode", EXPECTED)
-def test_terminal_status_shape_matches_only_its_canonical_outcome(tmp_path, provider_mode):
+def test_status_shape_matches_only_its_canonical_outcome(tmp_path, provider_mode):
     _, status, _ = asyncio.run(completed_mcp_results(tmp_path, provider_mode))
     verdict, consumer_state, lifecycle_state = EXPECTED[provider_mode]
     rule = PROOF_CARD_OUTCOME_RULES[verdict]
@@ -75,7 +75,7 @@ def test_terminal_status_shape_matches_only_its_canonical_outcome(tmp_path, prov
     assert status["lifecycle_state"] == lifecycle_state == rule["lifecycleState"]
     assert status["verification_status"] == verdict
     assert status["execution_status"] == "completed"
-    assert status["is_terminal"] is True
+    assert status["is_terminal"] is (lifecycle_state != "AWAITING_PROOF")
     for other_verdict, other_rule in PROOF_CARD_OUTCOME_RULES.items():
         if other_verdict != verdict:
             assert status["consumer_state"] != other_rule["consumerState"]
@@ -182,6 +182,10 @@ def test_presentation_contract_fails_closed_instead_of_trusting_labels_directly(
         "isTerminal !== true || confirmationRequired !== false",
         "derivedEvidenceVerdict(data.execution_claim, data.independent_read_back) === verdict",
         "validTerminalHistory(data.state_history, data.lifecycle_state)",
+        'const terminalStates = new Set(["VERIFIED", "NOT_COMPLETED"]);',
+        'validOpenHistory(data.state_history, data.verification_history)',
+        'outcome: "Awaiting proof"',
+        'support: "The request was sent, but CloseLoop still can’t verify the result. This resolution remains open."',
         'verifier.verifier !== "closeloop.verify_cancellation/v1"',
         'execution.source !== "demo_provider.cancel_subscription"',
         'readBack.source !== "demo_provider.read_cancellation_evidence"',

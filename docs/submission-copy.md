@@ -5,38 +5,23 @@ placeholder only after verifying it anonymously.
 
 ## Project title
 
-**CloseLoop — Proof Before “Done”**
+**CloseLoop: Alexa+ Resolution Ownership**
 
 ## One-line tagline
 
-**CloseLoop independently verifies consequential actions before Alexa+ tells you the task is done.**
+CloseLoop lets you hand Alexa+ a consequential task and keeps responsibility for it until the real-world outcome can actually be verified.
 
 ## Short description
 
-CloseLoop is a self-hosted Alexa+ MCP server that separates an agent’s action from the authority to
-declare success. It reads resulting state through a separate evidence path and returns Verified, Not completed, or
-Awaiting proof—with an evidence card that shows why.
+Alexa+ can take the action. CloseLoop makes sure the outcome actually happened. It stores each resolution, independent evidence, verification history, and next check so users can leave and return later without losing the task.
 
 ## Full description
 
-Agents can call tools, receive a success response, and confidently tell a customer that a task is
-finished—even when the real-world result is wrong or impossible to verify. That failure is
-especially costly for subscriptions, refunds, returns, and other financial life-admin work.
+CloseLoop is an Alexa+-native persistent resolution layer for consequential consumer tasks. Subscription cancellation is the implemented workflow. A user asks Alexa+ to cancel a subscription and make sure it happens. CloseLoop requires action-bound confirmation, records the provider receipt as a claim, reads the account state independently, and lets deterministic code evaluate the evidence.
 
-CloseLoop adds a verification boundary to consequential Alexa+ actions. In the flagship demo, a
-customer asks, “Alexa, cancel my subscription and make sure I won’t be charged again.” CloseLoop
-requires trusted confirmation, executes the cancellation through an action adapter, records the
-provider’s receipt as a claim, and independently reads the resulting account state. Deterministic
-code—not the agent, provider, Alexa+, or UI—then produces one of three outcomes:
+If the provider says “accepted” while auto-renew is still on, CloseLoop keeps the same resolution open as **Awaiting proof**. It preserves the read-back and schedules a bounded next check. In a later session Alexa+ retrieves that authoritative record; a fresh independent observation can then move it to **Verified**. A provider rejection alone remains a claim. `Not completed` requires a valid accepted receipt plus fresh independent evidence that auto-renew is still on at the final observation of the bounded four-check window. Earlier contradiction and unavailable evidence remain **Awaiting proof**.
 
-- **Verified:** fresh independent evidence proves auto-renew is off.
-- **Not completed:** read-back contradicts the provider’s success claim.
-- **Awaiting proof:** evidence is unavailable or insufficient, so CloseLoop refuses to guess.
-
-The Alexa-ready response is self-contained for voice, while a read-only MCP Apps proof card makes
-the lifecycle, evidence summary, and provenance visible. Amazon DynamoDB can serve as the
-authoritative owner-scoped lifecycle/evidence repository, using consistent reads and conditional
-writes to preserve confirmation consumption, concurrency safety, and immutable terminal outcomes.
+The product’s point is simple: requested is not executed, and executed is not resolved. The public repository demo simulates the session boundary, time advance, and provider state change over temporary SQLite. It is not a production scheduler or a live Alexa+ integration.
 
 ## Problem
 
@@ -53,22 +38,19 @@ that verdict but cannot override it.
 
 ## How it works
 
-1. Alexa+/an MCP client calls `start_resolution` with the customer’s goal.
-2. CloseLoop returns an action digest and stops at `AWAITING_CONFIRMATION`.
-3. A trusted confirmation authority signs the exact owner, resolution, action digest, affirmative
-   decision, issue/expiry times, and unique replay ID.
-4. `confirm_resolution_action` verifies and atomically consumes that attestation before mutation.
-5. The provider action receipt is persisted as an execution claim.
-6. A separate read-back collects resulting-state evidence.
-7. Deterministic predicates return PASS, FAIL, or INCONCLUSIVE.
-8. Alexa-ready structured data and the proof card present Verified, Not completed, or Awaiting
-   proof with expandable provenance.
+1. Alexa+ creates an owner-scoped resolution and asks the user to confirm the exact cancellation.
+2. CloseLoop verifies the signed, short-lived, single-use confirmation before invoking the provider.
+3. CloseLoop stores the action receipt but treats it as a claim.
+4. A separate read-back feeds the deterministic verifier.
+5. If evidence is inconclusive, the resolution remains open with bounded check count and `next_check_at`.
+6. Alexa+ can retrieve open or recently resolved records in a later session, explain the latest evidence, or explicitly request a recheck.
+7. Only deterministic verifier output can produce Verified, Not completed, or Awaiting proof.
 
 ## Technical architecture
 
 - Python/FastAPI application with an official MCP Python SDK server at `/mcp`.
 - Stateless Streamable HTTP supporting MCP `2025-11-25` and `2025-03-26` negotiation.
-- Exactly five closed-schema tools; no verdict-write capability.
+- Six closed-schema tools; no verdict-write capability.
 - Bearer-token resource-server boundary with issuer, audience, expiry, scope, and server-derived
   owner identity validation.
 - Versioned signed confirmation-attestation interface with freshness and replay protection.
@@ -80,29 +62,11 @@ that verdict but cannot override it.
 
 ## Alexa+ integration
 
-CloseLoop uses the self-hosted MCP path accepted by the Alexa+ track: Streamable HTTP, MCP
-`2025-11-25`, strict tools, protected-resource discovery, bearer-authenticated user operations,
-conversation-ready text/structured responses, and a `ui://` MCP Apps resource. Standard MCP
-Inspector and local integration tests verified initialization, tool/resource discovery, schemas,
-authenticated calls, and the complete lifecycle.
-
-**Verification label: INTEGRATION VERIFIED locally.** Alexa AI CLI/Local Inspector access,
-account linking, a live Alexa+ client, and Alexa+ proof-card rendering were unavailable. The project
-does not claim a deployed Alexa+ add-on or live Alexa+ verification.
+The implemented integration surface is a self-hosted authenticated Streamable HTTP MCP server with seven tools: start, confirm, retrieve status, retrieve evidence, list open work and list recent outcomes, and recheck. It has closed schemas, bearer-derived ownership, protected-resource metadata, and a read-only MCP Apps proof card. Local MCP SDK integration tests exercise the contracts. No Alexa+ account, device, host, or live session has been used for verification.
 
 ## AWS integration
 
-DynamoDB is not a demo log. When configured, it becomes the authoritative store for owner identity,
-resolution state, confirmation provenance, action receipt, independent evidence, verifier result,
-timestamps, history, and optimistic version. Composite owner/resolution keys enforce isolation;
-strongly consistent reads protect current-state decisions; conditional writes enforce creation,
-allowed transitions, single-winner confirmation consumption, and terminal immutability. A
-CloudFormation template provisions one encrypted `PAY_PER_REQUEST` table, and the runtime requires
-only `GetItem`, `PutItem`, and `Query`.
-
-**Verification label: SIMULATED.** The boto3 contract was exercised with Moto, including races,
-corrupt records, re-instantiation, pagination, error translation, and all three outcomes. No live
-AWS account, IAM policy, table, or CloudFormation API was exercised.
+DynamoDB can serve as the authoritative durable resolution/evidence repository. Conditional owner, state, version, and history writes protect transitions. The checked-in DynamoDB repository is Moto-tested; no live AWS table or CloudFormation deployment was exercised. A due-check worker can invoke the bounded service recheck with the persisted schedule token, but EventBridge Scheduler, Lambda, and SQS are not implemented.
 
 ## Security and trust model
 

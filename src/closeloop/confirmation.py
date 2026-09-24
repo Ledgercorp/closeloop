@@ -60,6 +60,7 @@ def confirmation_action_digest(
     resolution_id: str,
     intent: str,
     provider_mode: str,
+    target_digest: str = "",
 ) -> str:
     """Hash a domain-separated canonical description of the exact action."""
 
@@ -71,6 +72,7 @@ def confirmation_action_digest(
         "principal_id": principal_id,
         "provider_mode": provider_mode,
         "resolution_id": resolution_id,
+        "target_digest": target_digest,
     }
     encoded = json.dumps(
         payload,

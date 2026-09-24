@@ -162,7 +162,7 @@ def _index_html(*, public_bundle: bool = False) -> str:
     <div class="grid">
       <a href="confirmation.html"><span class="step">Step 1</span><h2>Confirmation required</h2><p>No consequential action has run.</p></a>
       <a href="healthy.html"><span class="step">Case A · PASS</span><h2>Verified</h2><p>Independent read-back confirms auto-renew is off.</p></a>
-      <a href="false_success.html"><span class="step">Case B · FAIL</span><h2>Not completed</h2><p>The provider claims success; read-back catches the contradiction.</p></a>
+      <a href="false_success.html"><span class="step">Case B · AWAITING PROOF</span><h2>Still checking</h2><p>The request was accepted, but auto-renew is still on. The resolution remains open.</p></a>
       <a href="evidence_outage.html"><span class="step">Case C · INCONCLUSIVE</span><h2>Awaiting proof</h2><p>CloseLoop refuses to invent certainty when evidence is unavailable.</p></a>
     </div>
     <footer>Open each card and expand “View evidence and provenance” during recording.</footer>

@@ -111,3 +111,9 @@ implemented. It must not blindly re-execute that action.
 
 Milestone 5 was verified with boto3 against Moto's in-memory DynamoDB simulation. No AWS account,
 live table, official DynamoDB Local process, or CloudFormation API was exercised.
+
+## Persistent follow-up boundary (2026-09-24)
+
+DynamoDB record mappings now persist `resolution_type`, `last_checked_at`, `next_check_at`, `check_count`, `max_checks`, `resolved_at`, `resolution_reason`, and append-only `verification_history` alongside the existing owner, lifecycle state, version, claim, and current evidence. The same conditional version/state update protects a check claim, outcome update, and terminal immutability. Moto repository coverage exercises these fields; no live DynamoDB or CloudFormation environment was used.
+
+No EventBridge Scheduler, Lambda, or SQS worker is implemented. A future worker would need a due-resolution access pattern and an internal authenticated path that supplies the exact stored schedule token to `recheck_resolution`; the method rejects stale or consumed schedule tokens and never repeats cancellation. The current repository lists open tasks by owner and returns their next check time. It does not provide a table-side due-item query or production schedule delivery.

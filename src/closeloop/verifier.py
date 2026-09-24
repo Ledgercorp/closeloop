@@ -20,6 +20,13 @@ def is_valid_action_receipt(receipt: object) -> bool:
         and bool(receipt.request_id.strip())
         and type(receipt.provider_reported_success) is bool
         and isinstance(receipt.message, str)
+        and (
+            receipt.target_digest is None
+            or (
+                isinstance(receipt.target_digest, str)
+                and re.fullmatch(r"[0-9a-f]{64}", receipt.target_digest) is not None
+            )
+        )
     )
 
 
@@ -32,6 +39,15 @@ def is_valid_cancellation_evidence(evidence: object) -> bool:
         return False
     freshness = evidence.freshness_seconds
     if freshness is not None and (type(freshness) is not int or freshness < 0):
+        return False
+    if evidence.target_digest is not None and (
+        not isinstance(evidence.target_digest, str)
+        or re.fullmatch(r"[0-9a-f]{64}", evidence.target_digest) is None
+    ):
+        return False
+    if evidence.attempt_id is not None and (
+        not isinstance(evidence.attempt_id, str) or not evidence.attempt_id.strip()
+    ):
         return False
     effective_end_date = evidence.effective_end_date
     if effective_end_date is not None:
@@ -49,6 +65,10 @@ def is_valid_cancellation_evidence(evidence: object) -> bool:
 def verify_cancellation(
     receipt: ActionReceipt,
     evidence: CancellationEvidence,
+    *,
+    terminal_failure: bool = False,
+    expected_target_digest: str | None = None,
+    expected_attempt_id: str | None = None,
 ) -> VerificationResult:
     """Deterministically verify whether subscription cancellation is proven.
 
@@ -82,20 +102,41 @@ def verify_cancellation(
             evidence=evidence,
         )
 
-    if evidence.auto_renew is True:
-        return VerificationResult(
-            verdict=ResolutionVerdict.FAIL,
-            consumer_state=ConsumerState.NOT_COMPLETED,
-            reason="Account is readable and auto-renew is still enabled.",
-            action_receipt=receipt,
-            evidence=evidence,
-        )
-
     if not is_valid_action_receipt(receipt) or receipt.provider_reported_success is not True:
         return VerificationResult(
             verdict=ResolutionVerdict.INCONCLUSIVE,
             consumer_state=ConsumerState.AWAITING_PROOF,
             reason="Execution did not return a reliable successful action receipt.",
+            action_receipt=receipt,
+            evidence=evidence,
+        )
+
+    if expected_target_digest is not None and (
+        receipt.target_digest != expected_target_digest
+        or evidence.target_digest != expected_target_digest
+        or evidence.attempt_id != expected_attempt_id
+    ):
+        return VerificationResult(
+            verdict=ResolutionVerdict.INCONCLUSIVE,
+            consumer_state=ConsumerState.AWAITING_PROOF,
+            reason="Independent evidence does not correlate to this action target and verification attempt.",
+            action_receipt=receipt,
+            evidence=evidence,
+        )
+
+    if evidence.auto_renew is True:
+        if terminal_failure:
+            return VerificationResult(
+                verdict=ResolutionVerdict.FAIL,
+                consumer_state=ConsumerState.NOT_COMPLETED,
+                reason="The bounded verification window ended and fresh account evidence still shows auto-renew enabled.",
+                action_receipt=receipt,
+                evidence=evidence,
+            )
+        return VerificationResult(
+            verdict=ResolutionVerdict.INCONCLUSIVE,
+            consumer_state=ConsumerState.AWAITING_PROOF,
+            reason="Cancellation was accepted but auto-renew is still enabled; the outcome remains open.",
             action_receipt=receipt,
             evidence=evidence,
         )

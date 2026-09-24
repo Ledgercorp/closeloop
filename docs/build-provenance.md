@@ -18,7 +18,7 @@ CloseLoop is a new, consumer-facing Alexa+-specific product. It is not a repacka
 - First-party demo provider with healthy / false-success / evidence-outage modes
 - Consumer state mapping: Verified / Not completed / Awaiting proof
 - Fault-injection, lifecycle, protocol, persistence, UI, and adversarial security tests
-- Alexa+-compatible self-hosted MCP server with five tools and protected-resource metadata
+- Alexa+-compatible self-hosted MCP server (expanded from five to seven tools on 2026-09-24) and protected-resource metadata
 - Trusted, action-bound confirmation-attestation boundary
 - Read-only MCP Apps proof card and local AppBridge validation path
 - AWS DynamoDB state/evidence repository and infrastructure template
@@ -27,3 +27,7 @@ CloseLoop is a new, consumer-facing Alexa+-specific product. It is not a repacka
 ## Reused source
 
 No CUF source code is currently copied into this repository.
+
+## Persistent resolution evolution (2026-09-24)
+
+This product evolution was implemented in the existing CloseLoop repository and architecture. It adds durable open `AWAITING_PROOF`, bounded read-only rechecks, verification-attempt history, recent-resolution retrieval, an explicit MCP recheck tool, and a simulated later-session public demo. The original deterministic verifier and signed confirmation boundary remain the authority for outcomes and execution. No CUF source was copied; no history was rewritten. Additional resolution kinds are domain-model values only; cancellation is still the only executable workflow. AWS behavior was locally tested with Moto, not a live AWS account; no Alexa+ device/session was used.

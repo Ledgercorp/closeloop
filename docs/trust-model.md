@@ -31,26 +31,13 @@ May not:
 
 ## Cancellation predicates
 
-PASS when:
-- independent account state is readable
-- evidence is fresh
-- auto-renew is false
-- an effective end date is present
-- the execution receipt is structurally valid and reports that the attempted action was accepted
+The deterministic verifier produces only PASS, FAIL, or INCONCLUSIVE. Consumer mapping is Verified, Not completed, and Awaiting proof.
 
-FAIL when:
-- independent account state is readable and fresh
-- auto-renew remains true after the attempted cancellation
+PASS requires readable fresh independent account evidence, auto-renew disabled, an effective end date, and a structurally valid accepted execution receipt.
 
-INCONCLUSIVE when:
-- independent state cannot be read
-- evidence is stale
-- evidence is incomplete
+FAIL means the deterministic verifier has independent evidence that the requested outcome did not complete. A provider-reported failure alone is still only a claim.
 
-Provider-reported success is never sufficient for PASS.
-Malformed receipts, malformed read-back evidence, and a failed execution followed by an apparently
-positive read-back are INCONCLUSIVE. A failed receipt cannot support PASS, while a fresh readable
-read-back that still shows auto-renew enabled remains FAIL.
+INCONCLUSIVE covers unavailable, stale, malformed, or incomplete evidence. Fresh read-back that still shows auto-renew enabled before the final check is INCONCLUSIVE: the state may still be catching up, so the persistent resolution remains open for bounded rechecks. At the final check, fresh target-correlated evidence that still shows auto-renew enabled establishes FAIL. Provider rejection without independent terminal failure evidence also remains open. Evidence outage never resolves the task.
 
 ## MCP enforcement
 
@@ -132,3 +119,6 @@ read-back that still shows auto-renew enabled remains FAIL.
   read-only card without signed server evidence or a trusted host-to-resource channel.
 - The HTTP stack bounds public schema fields but does not yet impose a raw request-body byte limit;
   the deployment edge must supply that availability control.
+
+
+Cancellation `FAIL` requires a valid accepted execution receipt plus readable, fresh, target-correlated independent evidence showing auto-renew remains enabled on the final scheduled observation after the bounded four-check window has elapsed; attempt-count exhaustion alone never establishes failure. Earlier contradiction remains `AWAITING_PROOF`; provider rejection or unavailable, stale, malformed, contradictory, or wrong-target evidence cannot establish failure.

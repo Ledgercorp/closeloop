@@ -16,12 +16,15 @@ EXPECTED_TOOLS = {
     "get_resolution_status",
     "get_resolution_evidence",
     "list_open_resolutions",
+    "list_recent_resolutions",
+    "recheck_resolution",
 }
-UI_TOOLS = EXPECTED_TOOLS - {"list_open_resolutions"}
+UI_TOOLS = EXPECTED_TOOLS - {"list_open_resolutions", "list_recent_resolutions"}
 FORBIDDEN_TOOLS = {"set_verdict", "mark_success", "force_pass"}
 EXPECTED_OUTCOMES = {
     "healthy": ("PASS", "Verified"),
-    "false_success": ("FAIL", "Not completed"),
+    "terminal_failure": ("FAIL", "Not completed"),
+    "false_success": ("INCONCLUSIVE", "Awaiting proof"),
     "evidence_outage": ("INCONCLUSIVE", "Awaiting proof"),
 }
 INTENT = "Cancel my subscription and make sure I will not be charged again."
@@ -112,18 +115,25 @@ def test_alexa_responses_preserve_all_verdicts_with_structured_and_text_fallback
                             started_data, "owner"
                         ),
                     },
-                )
-                data = completed.structured_content
-                assert completed.is_error is False
-                assert data["verdict"] == verdict
-                assert data["verification_status"] == verdict
-                assert data["consumer_state"] == consumer_state
-                assert data["execution_status"] == "completed"
-                assert data["evidence_summary"]
-                assert data["recommended_next_step"]
-                fallback = result_text(completed)
-                assert consumer_state in fallback
-                assert data["evidence_summary"] in fallback
+            )
+            data = completed.structured_content
+            if provider_mode == "terminal_failure":
+                while data["lifecycle_state"] == "AWAITING_PROOF":
+                    checked = await client.call_tool(
+                        "recheck_resolution",
+                        {"resolution_id": started_data["resolution_id"]},
+                    )
+                    data = checked.structured_content
+            assert completed.is_error is False
+            assert data["verdict"] == verdict
+            assert data["verification_status"] == verdict
+            assert data["consumer_state"] == consumer_state
+            assert data["execution_status"] == "completed"
+            assert data["evidence_summary"]
+            assert data["recommended_next_step"]
+            fallback = result_text(completed)
+            assert consumer_state in fallback
+            assert data["evidence_summary"] in fallback
 
     asyncio.run(exercise_outcomes())
 

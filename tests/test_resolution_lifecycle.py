@@ -23,13 +23,13 @@ class CountingProvider:
         self.execution_count = 0
         self.read_count = 0
 
-    def cancel_subscription(self) -> ActionReceipt:
+    def cancel_subscription(self, target) -> ActionReceipt:
         self.execution_count += 1
-        return ActionReceipt("action-1", True, "Cancellation accepted")
+        return ActionReceipt("action-1", True, "Cancellation accepted", target.target_digest)
 
-    def read_cancellation_evidence(self) -> CancellationEvidence:
+    def read_cancellation_evidence(self, target, attempt_id) -> CancellationEvidence:
         self.read_count += 1
-        return CancellationEvidence(True, False, "2026-09-30", 0)
+        return CancellationEvidence(True, False, "2026-09-30", 0, target.target_digest, attempt_id)
 
 
 def test_start_requires_confirmation_before_any_mutation(tmp_path):
@@ -56,7 +56,7 @@ def test_start_requires_confirmation_before_any_mutation(tmp_path):
     ("provider_mode", "verdict", "consumer_state", "lifecycle_state"),
     [
         ("healthy", "PASS", "Verified", "VERIFIED"),
-        ("false_success", "FAIL", "Not completed", "NOT_COMPLETED"),
+        ("false_success", "INCONCLUSIVE", "Awaiting proof", "AWAITING_PROOF"),
         ("evidence_outage", "INCONCLUSIVE", "Awaiting proof", "AWAITING_PROOF"),
     ],
 )
@@ -77,7 +77,7 @@ def test_confirmed_action_uses_independent_verification(
     assert completed["lifecycle_state"] == lifecycle_state
     assert completed["verdict"] == verdict
     assert completed["consumer_state"] == consumer_state
-    assert completed["is_terminal"] is True
+    assert completed["is_terminal"] is (provider_mode == "healthy")
     assert evidence["execution_claim"]["provider_reported_success"] is True
     assert evidence["execution_claim"]["evidence_type"] == "execution_claim"
     assert evidence["independent_read_back"]["evidence_type"] == "independent_read_back"
@@ -99,9 +99,10 @@ def test_provider_success_claim_cannot_create_verified_result(tmp_path):
 
     assert evidence["execution_claim"]["provider_reported_success"] is True
     assert evidence["independent_read_back"]["auto_renew"] is True
-    assert completed["verdict"] == "FAIL"
-    assert completed["consumer_state"] == "Not completed"
-    assert completed["lifecycle_state"] == "NOT_COMPLETED"
+    assert completed["verdict"] == "INCONCLUSIVE"
+    assert completed["consumer_state"] == "Awaiting proof"
+    assert completed["lifecycle_state"] == "AWAITING_PROOF"
+    assert completed["is_terminal"] is False
 
 
 def test_status_and_evidence_reads_do_not_mutate_outcome(tmp_path):

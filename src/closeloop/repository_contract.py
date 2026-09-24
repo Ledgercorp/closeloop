@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .confirmation import (
@@ -16,17 +16,22 @@ from .lifecycle import (
     TERMINAL_STATES,
     InvalidTransitionError,
     LifecycleState,
+    MAX_VERIFICATION_CHECKS,
     ResolutionRecord,
     ResolutionStorageUnavailableError,
+    ResolutionType,
     StateTransition,
+    VerificationAttempt,
     allowed_previous_states,
 )
 from .models import (
     ActionReceipt,
     CancellationEvidence,
     ConsumerState,
+    ResourceIdentity,
     ResolutionVerdict,
     VerificationResult,
+    demo_resource_identity,
 )
 from .verifier import verify_cancellation
 
@@ -55,6 +60,72 @@ def iso(value: datetime) -> str:
     return normalized.isoformat().replace("+00:00", "Z")
 
 
+def _attempts_from_mapping(value: Any, max_checks: int = 4) -> list[VerificationAttempt]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise TypeError("verification_history must be a list")
+    attempts = []
+    for index, raw in enumerate(value, start=1):
+        item = _required_mapping(raw, "verification attempt")
+        evidence_data = _required_mapping(item.get("evidence"), "attempt evidence")
+        receipt_data = _required_mapping(item.get("action_receipt"), "attempt receipt")
+        evidence = CancellationEvidence(
+            account_readable=_required_bool(evidence_data, "account_readable"),
+            auto_renew=_optional_bool(evidence_data.get("auto_renew"), "auto_renew"),
+            effective_end_date=_optional_str(evidence_data.get("effective_end_date"), "effective_end_date"),
+            freshness_seconds=_optional_int(evidence_data.get("freshness_seconds"), "freshness_seconds"),
+            target_digest=_optional_str(evidence_data.get("target_digest"), "target_digest"),
+            attempt_id=_optional_str(evidence_data.get("attempt_id"), "attempt_id"),
+        )
+        receipt = ActionReceipt(
+            request_id=_required_str(receipt_data, "request_id"),
+            provider_reported_success=_required_bool(receipt_data, "provider_reported_success"),
+            message=_required_str(receipt_data, "message", allow_empty=True),
+            target_digest=_optional_str(receipt_data.get("target_digest"), "target_digest"),
+        )
+        check_count = _optional_int(item.get("check_count"), index)
+        if check_count is None or check_count < index or check_count > max_checks:
+            raise ValueError("verification attempt count is invalid")
+        terminal_failure_eligible = (
+            _required_bool(item, "terminal_failure_eligible")
+            if "terminal_failure_eligible" in item
+            else False
+        )
+        checked_at = _required_time(item.get("checked_at"), "checked_at")
+        if terminal_failure_eligible and (
+            check_count < max_checks
+            or not attempts
+            or attempts[-1].checked_at + timedelta(minutes=5 * attempts[-1].check_count)
+            > checked_at
+        ):
+            raise ValueError("terminal failure check occurred before its bounded window")
+        result = verify_cancellation(
+            receipt,
+            evidence,
+            terminal_failure=terminal_failure_eligible and check_count >= max_checks,
+            expected_target_digest=receipt.target_digest,
+            expected_attempt_id=_optional_str(item.get("attempt_id"), "attempt_id"),
+        )
+        if (
+            result.verdict.value != _required_str(item, "verdict")
+            or result.consumer_state.value != _required_str(item, "consumer_state")
+            or result.reason != _required_str(item, "reason", allow_empty=True)
+        ):
+            raise ValueError("verification history does not match deterministic evaluation")
+        attempts.append(
+            VerificationAttempt(
+                checked_at=checked_at,
+                evidence=evidence,
+                result=result,
+                attempt_id=_optional_str(item.get("attempt_id"), "attempt_id") or "",
+                check_count=check_count,
+                terminal_failure_eligible=terminal_failure_eligible,
+            )
+        )
+    return attempts
+
+
 def validate_new_record(record: ResolutionRecord) -> None:
     if record.state is not LifecycleState.AWAITING_CONFIRMATION or record.version != 0:
         raise InvalidTransitionError(
@@ -69,6 +140,44 @@ def validate_new_record(record: ResolutionRecord) -> None:
 
 
 def validate_target_record(record: ResolutionRecord) -> None:
+    if record.target is None and record.version == 0 and record.state is LifecycleState.AWAITING_CONFIRMATION:
+        record.target = demo_resource_identity(record.owner_id)
+    expected_demo_target = demo_resource_identity(record.owner_id)
+    if record.target != expected_demo_target:
+        raise InvalidTransitionError("resolution target identity is invalid")
+    if (
+        type(record.max_checks) is not int
+        or not 1 <= record.max_checks <= MAX_VERIFICATION_CHECKS
+        or type(record.check_count) is not int
+        or not 0 <= record.check_count <= record.max_checks
+        or len(record.verification_history) > record.check_count
+    ):
+        raise InvalidTransitionError("verification check budget is invalid")
+    if record.state is LifecycleState.AWAITING_PROOF:
+        if (
+            record.verification is None
+            or record.verification.verdict is not ResolutionVerdict.INCONCLUSIVE
+            or record.resolved_at is not None
+            or (record.check_count < record.max_checks) != (record.next_check_at is not None)
+        ):
+            raise InvalidTransitionError("awaiting-proof schedule metadata is inconsistent")
+    if record.state in TERMINAL_STATES:
+        if record.next_check_at is not None or record.resolved_at is None:
+            raise InvalidTransitionError("terminal resolution metadata is inconsistent")
+    prior_count = 0
+    prior_checked_at: datetime | None = None
+    seen_attempts: set[str] = set()
+    for attempt in record.verification_history:
+        if (
+            not attempt.attempt_id
+            or attempt.attempt_id in seen_attempts
+            or not prior_count < attempt.check_count <= record.check_count
+            or (prior_checked_at is not None and utc(attempt.checked_at) < utc(prior_checked_at))
+        ):
+            raise InvalidTransitionError("verification attempt history is inconsistent")
+        seen_attempts.add(attempt.attempt_id)
+        prior_count = attempt.check_count
+        prior_checked_at = attempt.checked_at
     if not record.resolution_id.strip() or not record.owner_id.strip():
         raise InvalidTransitionError("resolution requires an authenticated owner and identifier")
     if not record.intent.strip() or not record.provider_mode.strip():
@@ -164,8 +273,9 @@ def validate_target_record(record: ResolutionRecord) -> None:
     expected_digest = confirmation_action_digest(
         principal_id=record.owner_id,
         resolution_id=record.resolution_id,
-        intent=record.intent,
-        provider_mode=record.provider_mode,
+                intent=record.intent,
+                provider_mode=record.provider_mode,
+                target_digest=record.target.target_digest if record.target else "",
     )
     if attestation.action_digest != expected_digest:
         raise InvalidTransitionError("confirmation action digest does not match resolution")
@@ -216,7 +326,7 @@ def validate_target_record(record: ResolutionRecord) -> None:
                 "verifying resolution cannot contain a terminal verifier result"
             )
         return
-    if record.state in TERMINAL_STATES:
+    if record.state in {*TERMINAL_STATES, LifecycleState.AWAITING_PROOF}:
         if (
             record.independent_evidence is None
             or record.independent_evidence_observed_at is None
@@ -243,7 +353,21 @@ def validate_target_record(record: ResolutionRecord) -> None:
             or record.independent_evidence != record.verification.evidence
         ):
             raise InvalidTransitionError("terminal verifier inputs do not match stored evidence")
-        computed = verify_cancellation(record.execution_claim, record.independent_evidence)
+        computed = verify_cancellation(
+            record.execution_claim,
+            record.independent_evidence,
+            terminal_failure=(
+                bool(record.verification_history)
+                and record.verification_history[-1].terminal_failure_eligible
+                and record.check_count >= record.max_checks
+            ),
+            expected_target_digest=record.target.target_digest if record.target else None,
+            expected_attempt_id=(
+                record.verification_history[-1].attempt_id
+                if record.verification_history
+                else None
+            ),
+        )
         if record.verification != computed:
             raise InvalidTransitionError(
                 "stored verifier result does not match deterministic evaluation"
@@ -265,6 +389,12 @@ def record_to_mapping(
         "owner_id": record.owner_id,
         "intent": record.intent,
         "provider_mode": record.provider_mode,
+        "target": {
+            "provider": record.target.provider,
+            "account_subject": record.target.account_subject,
+            "resource_id": record.target.resource_id,
+            "target_digest": record.target.target_digest,
+        },
         "state": record.state.value,
         "created_at": time_value(record.created_at),
         "updated_at": time_value(record.updated_at),
@@ -274,6 +404,7 @@ def record_to_mapping(
                 "request_id": record.execution_claim.request_id,
                 "provider_reported_success": record.execution_claim.provider_reported_success,
                 "message": record.execution_claim.message,
+                "target_digest": record.execution_claim.target_digest,
             }
             if record.execution_claim
             else None
@@ -285,6 +416,8 @@ def record_to_mapping(
                 "auto_renew": record.independent_evidence.auto_renew,
                 "effective_end_date": record.independent_evidence.effective_end_date,
                 "freshness_seconds": record.independent_evidence.freshness_seconds,
+                "target_digest": record.independent_evidence.target_digest,
+                "attempt_id": record.independent_evidence.attempt_id,
             }
             if record.independent_evidence
             else None
@@ -303,6 +436,39 @@ def record_to_mapping(
         ),
         "verified_at": time_value(record.verified_at),
         "state_history": [_transition_to_mapping(item) for item in record.state_history],
+        "resolution_type": record.resolution_type.value,
+        "last_checked_at": time_value(record.last_checked_at),
+        "next_check_at": time_value(record.next_check_at),
+        "check_count": record.check_count,
+        "max_checks": record.max_checks,
+        "resolved_at": time_value(record.resolved_at),
+        "resolution_reason": record.resolution_reason,
+        "verification_history": [
+            {
+                "checked_at": iso(attempt.checked_at),
+                "attempt_id": attempt.attempt_id,
+                "check_count": attempt.check_count,
+                "terminal_failure_eligible": attempt.terminal_failure_eligible,
+                "evidence": {
+                    "account_readable": attempt.evidence.account_readable,
+                    "auto_renew": attempt.evidence.auto_renew,
+                    "effective_end_date": attempt.evidence.effective_end_date,
+                    "freshness_seconds": attempt.evidence.freshness_seconds,
+                    "target_digest": attempt.evidence.target_digest,
+                    "attempt_id": attempt.evidence.attempt_id,
+                },
+                "verdict": attempt.result.verdict.value,
+                "consumer_state": attempt.result.consumer_state.value,
+                "reason": attempt.result.reason,
+                "action_receipt": {
+                    "request_id": attempt.result.action_receipt.request_id,
+                    "provider_reported_success": attempt.result.action_receipt.provider_reported_success,
+                    "message": attempt.result.action_receipt.message,
+                    "target_digest": attempt.result.action_receipt.target_digest,
+                },
+            }
+            for attempt in record.verification_history
+        ],
         "version": record.version,
     }
 
@@ -323,6 +489,7 @@ def record_from_mapping(mapping: Mapping[str, Any]) -> ResolutionRecord:
                     receipt_data, "provider_reported_success"
                 ),
                 message=_required_str(receipt_data, "message", allow_empty=True),
+                target_digest=_optional_str(receipt_data.get("target_digest"), "target_digest"),
             )
         evidence = None
         if evidence_data is not None:
@@ -335,6 +502,8 @@ def record_from_mapping(mapping: Mapping[str, Any]) -> ResolutionRecord:
                 freshness_seconds=_optional_int(
                     evidence_data.get("freshness_seconds"), "freshness_seconds"
                 ),
+                target_digest=_optional_str(evidence_data.get("target_digest"), "target_digest"),
+                attempt_id=_optional_str(evidence_data.get("attempt_id"), "attempt_id"),
             )
         verification = None
         if verification_data is not None:
@@ -390,11 +559,27 @@ def record_from_mapping(mapping: Mapping[str, Any]) -> ResolutionRecord:
         version = mapping["version"]
         if isinstance(version, bool) or int(version) != version:
             raise TypeError("version must be an integer")
+        owner_id = _required_str(mapping, "owner_id")
+        target_data = _optional_mapping(mapping.get("target"), "target")
+        target = (
+            ResourceIdentity(
+                provider=_required_str(target_data, "provider"),
+                account_subject=_required_str(target_data, "account_subject"),
+                resource_id=_required_str(target_data, "resource_id"),
+                target_digest=_required_str(target_data, "target_digest"),
+            )
+            if target_data
+            else demo_resource_identity(owner_id)
+        )
+        max_checks = _optional_int(mapping.get("max_checks"), "max_checks")
+        if max_checks is None:
+            max_checks = MAX_VERIFICATION_CHECKS
         record = ResolutionRecord(
             resolution_id=_required_str(mapping, "resolution_id"),
-            owner_id=_required_str(mapping, "owner_id"),
+            owner_id=owner_id,
             intent=_required_str(mapping, "intent"),
             provider_mode=_required_str(mapping, "provider_mode"),
+            target=target,
             state=LifecycleState(_required_str(mapping, "state")),
             created_at=_required_time(mapping.get("created_at"), "created_at"),
             updated_at=_required_time(mapping.get("updated_at"), "updated_at"),
@@ -412,6 +597,19 @@ def record_from_mapping(mapping: Mapping[str, Any]) -> ResolutionRecord:
             verification=verification,
             verified_at=_optional_time(mapping.get("verified_at"), "verified_at"),
             state_history=history,
+            resolution_type=ResolutionType(
+                _optional_str(mapping.get("resolution_type"), "resolution_type") or "CANCELLATION"
+            ),
+            last_checked_at=_optional_time(mapping.get("last_checked_at"), "last_checked_at"),
+            next_check_at=_optional_time(mapping.get("next_check_at"), "next_check_at"),
+            check_count=_optional_int(mapping.get("check_count"), "check_count") or 0,
+            max_checks=max_checks,
+            resolved_at=_optional_time(mapping.get("resolved_at"), "resolved_at"),
+            resolution_reason=_optional_str(mapping.get("resolution_reason"), "resolution_reason"),
+            verification_history=_attempts_from_mapping(
+                mapping.get("verification_history"),
+                max_checks,
+            ),
             version=int(version),
         )
         validate_target_record(record)
