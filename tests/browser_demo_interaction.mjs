@@ -107,8 +107,16 @@ try {
   const response = await page.goto(url, { waitUntil: 'load' });
   check(response?.status() === 200, 'GET /demo/ did not return 200');
   check(
-      await page.getByText('Waiting for your confirmation', { exact: false }).isVisible(),
+    await page.locator('#confirmation').isVisible(),
     'initial confirmation gate is not visible'
+  );
+  check(
+    await page.getByRole('button', { name: /recommended recovery story/i }).isVisible(),
+    'recommended recovery story is not the primary demo action'
+  );
+  check(
+    await page.getByText('What’s simulated:', { exact: false }).isVisible(),
+    'simulation boundaries are not visible before interaction'
   );
   check(posts.length === 0, 'a cancellation request ran before confirmation');
   check(
@@ -130,6 +138,7 @@ try {
     );
   }
 
+  await page.locator('.other-scenarios summary').click();
   const verified = await runScenario('#run', 'persistent_resolution', 'VERIFIED', 'PASS');
   check(
     verified.resolution.resolution_receipt?.outcome === 'Canceled' &&
@@ -153,6 +162,7 @@ try {
   );
   check(verified.execution_claim.request_reference.length > 0, 'execution claim is missing');
   check(verified.verification_history.length > 0, 'verification history is missing');
+  check((await page.locator('#proof summary').innerText()) === 'See proof', 'receipt proof disclosure is not consumer-readable');
   await page.locator('#proof summary').click();
   check(await page.locator('#proof').evaluate((element) => element.open), 'proof disclosure did not open');
   check(
@@ -178,6 +188,27 @@ try {
     'Not completed screen contradicted its terminal outcome'
   );
   const recovery = await runScenario('#recovery', 'recovery_loop', 'VERIFIED', 'PASS');
+  const recoveryTimeline = await page.locator('#story').innerText();
+  check(
+    ['ACTION ACCEPTED', 'CLOSELOOP CHECKED', 'NEEDS YOUR ATTENTION', 'NEW AUTHORIZATION', 'INDEPENDENT RECHECK'].every((step) => recoveryTimeline.includes(step)),
+    'guided recovery timeline is missing consumer-readable steps'
+  );
+  check(
+    !/UNDEFINED|Status unavailable/.test(recoveryTimeline),
+    'recovery timeline contains an unmapped step'
+  );
+  check(
+    recoveryTimeline.includes('“Handle it.”'),
+    'separate recovery authorization utterance is not visible'
+  );
+  check(
+    (await page.locator('#responsibility-label').innerText()) === 'Closed with independent proof',
+    'open-loop summary does not reflect authoritative terminal state'
+  );
+  check(
+    await page.getByRole('heading', { name: 'Why trust the result?' }).isVisible(),
+    'trust explanation is not visible'
+  );
   check(
     recovery.lifecycle_story.some((scene) => scene.scene === 'RECOVERY_CONFIRMATION') &&
       recovery.lifecycle_story.some((scene) => scene.scene === 'RESOLUTION_RECEIPT'),
@@ -191,6 +222,10 @@ try {
   );
   const unknown = await runScenario('#outage', 'evidence_outage', 'AWAITING_PROOF', 'INCONCLUSIVE');
   check(unknown.resolution.is_terminal === false, 'evidence outage became terminal');
+  check(
+    (await page.locator('#responsibility-label').innerText()) === 'CloseLoop is still watching',
+    'unknown evidence was not described as an open responsibility'
+  );
   check(unknown.resolution.next_check_at !== null, 'evidence outage lost its next-check metadata');
   check(
     unknown.independent_read_back.account_readable === false,

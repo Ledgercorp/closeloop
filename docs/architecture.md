@@ -152,3 +152,38 @@ The attention policy derives SILENT, INFORMATIONAL, ACTION_NEEDED, or URGENT fro
 The recovery and post-deadline renewal-charge scenes use a deterministic simulated provider and simulated spoken confirmation in `/demo/`. Billing observation must be correlated to the original owner, resolution, target, prohibited outcome, and deadline before the verifier can return FAIL. The violation, receipt, attention history, and recovery provenance are projected from persisted records. No refund is sent.
 
 Recovery metadata may be version-updated while a resolution remains in a nonterminal state without appending a fake lifecycle transition. The SQL and DynamoDB conditional writes still check owner, version, current state, and exact state history. Terminal VERIFIED and NOT_COMPLETED rows remain immutable. A due-check worker and Alexa notification adapter are roadmap; no production scheduler or live Alexa Proactive Events delivery is implemented.
+
+
+## Consumer lifecycle view (judge demo)
+
+```text
+Ask Alexa normally
+       |
+       v
+Persistent outcome obligation
+       |
+       +--> separately confirmed cancellation action
+       |
+       +--> provider response (claim only)
+       |
+       +--> independent account evidence
+                    |
+                    v
+          deterministic verifier
+           /        |         \
+     Verified   Not completed   Awaiting proof (open)
+           \        |         /
+             attention policy
+                    |
+             recovery proposal
+                    |
+       new action-bound confirmation
+                    |
+          bounded recovery action
+                    |
+       independent re-verification
+                    |
+            resolution receipt
+```
+
+The browser demo selects only a bounded server-side scenario; it cannot submit a verdict, evidence, or confirmation attestation. StreamBox, billing observations, time, and spoken Alexa consent are simulated. The attention, recovery, and verification code paths are CloseLoop behavior. Live Alexa+ invocation, Proactive Events delivery, a scheduler/worker, live provider integration, and live DynamoDB remain unverified or future work; none is drawn as a deployed service here. Recovery execution and its receipt do not alter the verifier’s authority.

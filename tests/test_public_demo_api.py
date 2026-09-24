@@ -415,7 +415,10 @@ def test_primary_resolution_demo_has_consumer_flows_and_discloses_simulation():
     assert 'id="failure"' in page
     assert 'id="outage"' in page
     assert 'id="proof"' in page
-    assert "Isolated simulation" in page
+    assert "What’s real:" in page
+    assert "What’s simulated:" in page
+    assert "Recommended demo" in page
+    assert "Why trust the result?" in page
     assert "DecompressionStream" not in page
 
 
@@ -469,7 +472,7 @@ def test_polished_browser_bundle_only_requests_scenario_and_has_no_verifier_logi
     assert "textContent = JSON.stringify(result, null, 2)" in bundle
     assert "innerHTML" not in bundle
     assert "lifecycle_story" in bundle
-    assert "View evidence and provenance" in bundle
+    assert "See proof" in bundle
     assert "Next check (simulated)" in bundle
     assert 'AWAITING_PROOF: "Awaiting proof"' in bundle
     assert 'VERIFYING: "Checking result"' in bundle

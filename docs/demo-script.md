@@ -1,58 +1,74 @@
-# CloseLoop resolution demo
+# CloseLoop judge demo and recording plan
 
-## Recording setup
+## Recording boundaries
 
-Run the local FastAPI application using the commands in the README, then open `/demo/`. The browser exercise uses the production lifecycle, SQLite repository, independent verifier, and proof-card contract with a deterministic demo provider. It uses simulated time and a temporary database. No Alexa+ account, live provider, AWS account, EventBridge schedule, or production action is involved.
+Record the public demo at `https://closeloop-zeta.vercel.app/demo/` in a clean, signed-out Chromium context. The recovery button is the recommended path. The demo runs CloseLoop server-side lifecycle and verifier code against isolated demo state. StreamBox, the billing observation, time advancement, and spoken Alexa interactions are simulated. No real cancellation or refund is performed. No live Alexa+, AWS service, or production scheduler is used.
 
-The `persistent_resolution` scenario models a later session by constructing a new `ResolutionService` over the same SQLite database and advancing the check time to the stored `next_check_at`. It demonstrates the real persistence contract, not a deployed scheduler.
+The browser selects a bounded scenario only. It does not submit a verdict, evidence, owner, target, confirmation attestation, or result. The recovery utterance shown in the demo is simulated consent; the production confirmation authority has not been connected to Alexa+.
 
-## Three-minute walkthrough
+## Complete narration (2:45 target)
 
-### 0:00 — Delegate
+### 0:00–0:15 — The problem
 
-Say: “Alexa, cancel StreamBox before next Friday and make sure I don’t get charged again.”
+**Narration:** “When an assistant says ‘done,’ what does that mean? A successful request only proves the action ran. It doesn’t prove the result we wanted happened.”
 
-Show the request and confirmation-required stage. State that no provider action occurs before confirmation.
+### 0:15–0:35 — Ask normally
 
-### 0:25 — Accepted is not resolved
+**Narration:** “I ask Alexa to cancel StreamBox before Friday and make sure I don’t get charged again. CloseLoop keeps that responsibility attached to the request. The cancellation waits for my confirmation.”
 
-Select **Confirm cancellation**. The provider accepts the request, but the independent account read-back still shows auto-renew enabled. Read the response:
+### 0:35–0:55 — False success
 
-> “StreamBox accepted the cancellation request, but auto-renew is still on. I’m not marking this resolved yet.”
+**Narration:** “StreamBox says the cancellation was accepted. A normal assistant could stop here. CloseLoop checks the account separately: auto-renew is still on. The action succeeded. The outcome didn’t.”
 
-Point out that the same resolution is `AWAITING_PROOF`, remains open, and retains the check schedule and evidence.
+### 0:55–1:15 — Keep the loop open
 
-### 1:00 — Return in a later session
+**Narration:** “CloseLoop leaves the same request open and keeps watching. Time moves toward the renewal in this simulation. Nothing needs me yet, so it stays quiet.”
 
-Show **Later session** retrieving the same resolution ID and open state. No new cancellation is started. The stored due time drives one bounded independent recheck.
+### 1:15–1:38 — Attention and recovery
 
-### 1:30 — Resolve with proof
+**Narration:** “As the deadline gets close, the request needs my attention. CloseLoop offers a support follow-up using the cancellation details already saved. That is a new action, so it asks again. ‘Handle it’ is simulated here; this confirmation is separate from the cancellation.”
 
-Show fresh read-back with auto-renew off and an effective end date. The deterministic verifier moves the same resolution to `VERIFIED`. Read:
+### 1:38–1:58 — Reverify
 
-> “It’s verified canceled now. Auto-renew is off and your access ends October 3.”
+**Narration:** “The follow-up is prepared. Its receipt does not prove anything changed. CloseLoop checks the account again. Auto-renew is now off, so the independent evidence—not the recovery action—closes the loop.”
 
-Expand provenance to show the provider claim, both independent observations, and state history.
+### 1:58–2:17 — Outcome violation
 
-### 2:05 — Preserve uncertainty
+**Narration:** “There’s another way reality can go wrong. A simulated nineteen-dollar-and-ninety-nine-cent renewal charge appears after cancellation. CloseLoop saves the charge with the original request and timeline. It can prepare a refund request, but it does not send one.”
 
-Select **See when evidence is unavailable**. Read-back is unavailable, so the state remains `AWAITING_PROOF`; CloseLoop does not claim completion.
+### 2:17–2:32 — Open responsibility and proof
 
-### 2:20 — Not completed outcome
-Select **See a verified not completed outcome**. The simulation performs four bounded fresh read-backs. Auto-renew remains enabled on the final check, so the deterministic verifier returns `NOT_COMPLETED`. This result comes from independent evidence, not provider rejection.
+**Narration:** “Open Loops tells me what is still being handled and whether I need to act. The receipt gives me the plain answer first, with the evidence available underneath.”
 
-### 2:25 — Architecture and limits
+### 2:32–2:45 — Why trust it
 
-Explain that SQL/DynamoDB repositories persist owner-scoped records, and conditional writes protect transitions. The check budget is four total observations, with deterministic backoff. A worker may later trigger the due-check boundary; no production scheduler is implemented. DynamoDB is tested with Moto, not live AWS. Alexa+ integration has not been exercised on an Alexa account or device.
+**Narration:** “Alexa, the provider, and recovery cannot mark their own work successful. CloseLoop checks reality independently, and says when it doesn’t know. Ask Alexa to handle it. CloseLoop checks what actually happened.”
 
-## Keep visible
+## Shot list
 
-Lead with the request, current resolution, what remains open, next check, and final answer. Keep hashes, digests, JSON, and protocol details inside **View evidence and provenance**. Never describe provider acceptance as resolution, simulated time as a production scheduler, or this local demo as live Alexa+ or AWS.
+| Time / duration | Page and state | Cursor action | Narration | Visible text / evidence | Transition |
+|---|---|---|---|---|---|
+| 0:00–0:15 · 15s | `/demo/`, initial signed-out view | Hold on headline and request; no click | Problem narration | “Ask Alexa to handle it. CloseLoop checks whether it actually happened”; StreamBox request; simulation disclosure | Cut to confirmation button |
+| 0:15–0:35 · 20s | Waiting for confirmation | Point to request, then click **Confirm cancellation and follow the recommended recovery story** | Ask normally | Waiting confirmation; confirmation is required; browser starts one bounded scenario | Let timeline finish rendering |
+| 0:35–0:55 · 20s | Recovery timeline | Point from **ACTION ACCEPTED** to **CLOSELOOP CHECKED** | False-success narration | “accepted”; “auto-renew is still on”; “Not resolved yet”; false-success card highlighted | Hold on contradiction |
+| 0:55–1:15 · 20s | Same recovery timeline | Scroll only enough to show simulated time and attention entries | Keep loop open | **SIMULATED TIME**; **NEEDS YOUR ATTENTION**; renews tomorrow | Move to separate authorization |
+| 1:15–1:38 · 23s | Recovery timeline | Point to “Handle it” and **NEW AUTHORIZATION**; do not click another action | Attention and recovery narration | New confirmation; follow-up details saved; cancellation was not repeated | Move down one entry |
+| 1:38–1:58 · 20s | Reverification and receipt | Point to **INDEPENDENT RECHECK**, then receipt | Reverify narration | **Checking the account again**; auto-renew off; verified result; October 3 access end; proof disclosure | Open “Explore other outcomes” |
+| 1:58–2:17 · 19s | Alternate outcome | Click **Explore other outcomes**, then the renewal-charge scenario | Outcome-violation narration | $19.99 simulated charge after cancellation; evidence timeline; refund request is a draft and nothing is sent | Return to recovery receipt or stay on violation proof |
+| 2:17–2:32 · 15s | Responsibility summary and proof | Show “Closed with independent proof”; open **See proof** briefly | Open Loops narration | Consumer summary first; persisted receipt and evidence underneath | Close proof and move to trust explanation |
+| 2:32–2:45 · 13s | Trust explanation, then technical page only if time | Point to “Why trust the result?”; optional quick cut to `/demo/index.html` | Trust narration | Separate evidence, unknown stays open, separate recovery confirmation; seven MCP tools and tests may appear as a title card | End on product tagline |
 
-## Recovery and outcome-violation scenes
+## Judge-visible proof checklist
 
-The consumer demo also offers two bounded scenarios. **See CloseLoop help recover** advances simulated time to the deadline window, surfaces ACTION_NEEDED from fresh enabled-state evidence, shows a new confirmation bound to `prepare_support_followup`, records the simulated provider receipt, then independently rechecks the same resolution and renders its persisted receipt. The simulated storyline includes the user's “Handle it” confirmation; the browser does not mint or submit a trusted attestation.
+- The request is waiting for confirmation before the demo starts.
+- Provider acceptance and independent account state are shown as different facts.
+- The false-success step remains unresolved.
+- The deadline advances only as simulated time.
+- Recovery is a separate action and displays a separate simulated authorization.
+- The recovery receipt is followed by independent reverification.
+- Verified is shown only when the independent read-back supports it.
+- Outcome Violation uses correlated simulated billing evidence; the refund request remains unsent.
+- Awaiting proof stays open if evidence is unavailable; Not completed is evidence-supported.
+- Expanded proof is derived from the returned persisted resolution result.
 
-**See a renewal charge after cancellation** records a simulated, deadline-bound billing read-back correlated to the same owner, resolution, and provider target. The verifier returns **Not completed** from that evidence, CloseLoop records URGENT attention, and a separately confirmed simulation prepares (but does not send) a refund-request draft. This is not bank monitoring or a real charge/refund integration.
-
-All demo timing, provider state changes, billing observations, and user confirmations are isolated simulations. No production scheduler, Alexa Proactive Events delivery, live Alexa+ session, or real customer account is exercised.
+Do not show developer credentials, private browser tabs, real customer data, or claim live integrations. Do not submit or upload a video as part of this repository task.

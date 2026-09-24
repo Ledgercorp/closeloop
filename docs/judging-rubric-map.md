@@ -1,58 +1,28 @@
 # Judging rubric map
 
-Verified against the [official rules](https://amazonappdev2026.devpost.com/rules) and
-[hackathon overview](https://amazonappdev2026.devpost.com/) on 2026-09-06. Judges may rely only on
-the description, images, and video, so each claim below has a visible demo moment and repository
-artifact.
+This map uses only criterion names already recorded from the [official competition rules](https://amazonappdev2026.devpost.com/rules) and [official overview](https://amazonappdev2026.devpost.com/). It does not add criteria or assert bonus eligibility. Verify the live rules page before submission in case the organizer updates it.
 
-## Stage 1 eligibility
-
-| Requirement | CloseLoop evidence | Repository/demo proof | Strength | Limitation |
+| Official criterion / requirement (as recorded) | What a judge sees | Implementation evidence | Video moment | Supporting evidence and limitation |
 |---|---|---|---|---|
-| Alexa+ primary track | Self-hosted MCP server using Streamable HTTP and MCP 2025-11-25 | `src/closeloop/mcp_server.py`; `tests/test_alexa_integration.py`; 2:25 video | Strong local integration | No live Alexa+ client, add-on, Local Inspector, or account linking |
-| Runtime technology use | Official MCP Python SDK is imported and executes the seven-tool persistent lifecycle | `pyproject.toml`; `src/closeloop/mcp_server.py`; public server-backed demo | Strong local integration plus public deterministic demo | Public demo is isolated simulation; live MCP actions remain authenticated and are not publicly exercised |
-| Working demonstration | Persistent resolution, trusted confirmation, later-session retrieval, independent evidence, bounded recheck, and three deterministic outcomes use the real local CloseLoop lifecycle | Local /demo/ and API tests; demo script | Strong local end-to-end evidence | The reconciled persistent-resolution baseline was signed-out verified; recovery scenario is signed-out browser verified at the canonical production URL; provider and confirmation remain simulations |
-| Public source and setup | Public GitHub repository, canonical Apache-2.0, quick-start commands | `README.md`; `LICENSE` | Strong; anonymous access and GitHub license detection verified | Public video remains a manual submission step |
-| Hackathon provenance | New CloseLoop code is separated from prior CUF concepts | `docs/build-provenance.md`; README provenance | Explicit | Prior conceptual experience is disclosed, not claimed as new |
-| Product feedback | Actual tooling attempts, successes, limits, and recommendations | `docs/product-feedback.md`; `docs/friction-log.md` | Detailed and reproducible | Some Alexa+/AWS tooling was inaccessible |
-| AWS Builder | DynamoDB is the optional authoritative repository, not a decorative call | `src/closeloop/dynamodb_repository.py`; `infra/aws/closeloop-dynamodb.json`; 2:25 video | Meaningful architecture | Moto-simulated; no live AWS deployment |
+| Alexa+ primary track | A normal Alexa-style request and CloseLoop’s outcome ownership story | Authenticated Streamable HTTP MCP server and Alexa+-designed flow | 0:15–0:35 | Seven-tool MCP and integration tests; no live Alexa+ account or device session |
+| Runtime technology use | Product behavior backed by the CloseLoop lifecycle rather than a frontend verdict | MCP Python SDK, persistent resolution service, deterministic verifier | 0:35–1:58 | Full suite and public server-backed demo; public demo is an isolated simulation |
+| Working demonstration | False success, recovery, separate authorization, independent recheck, receipt, and alternate failure/uncertainty paths | `/demo/` uses server-generated results, evidence, and lifecycle records | 0:35–2:32 | Signed-out Chromium production scenarios; simulated provider, billing, consent, and time |
+| Public source and setup | Repository, license, setup steps, and public demo | Public GitHub repository, Apache-2.0 license, README | 2:32–2:45 / description | Source and demo are public; video still must be recorded and uploaded by the creator |
+| Hackathon provenance | Clear separation of CloseLoop product work from prior concepts | Build provenance document and repository history | Optional brief end card | `docs/build-provenance.md`; no CUF source copied |
+| Product feedback | Reproducible product/tooling observations and limitations | Feedback and friction logs | Not required in the 2:45 story | `docs/product-feedback.md` and `docs/friction-log.md`; entries remain historical, not fabricated |
+| AWS Builder | A relevant, bounded AWS persistence design rather than decorative service claims | Optional DynamoDB repository and one-table template | Optional end card only if time | Moto-tested; no live AWS table, deployment, or runtime is claimed |
+| Technical implementation | Separate action, evidence, verification, recovery, and confirmation authority | Seven closed-schema MCP tools; owner-scoped persistence; deterministic verifier; recovery state; adversarial coverage | 0:35–1:58 and 2:32–2:45 | `docs/architecture.md`, `docs/trust-model.md`, tests; no live identity provider or scheduler |
+| Design | Consumer language first, highlighted false success, understandable responsibility, and expandable proof | Public demo first viewport, guided recovery, alternate outcomes, trust explanation, receipt | 0:00–2:32 | Signed-out mobile/desktop production checks; simulation disclosures remain visible |
+| Potential impact | Prevents users from mistaking an accepted action for a completed real-world result | Persistent outcome tracking, quiet attention, safe recovery, evidence-backed receipts | 0:35–2:17 | Current executable workflow is simulated subscription cancellation, not broad provider coverage |
+| Quality of idea | Memorable distinction between requested, executed, resolved, and recovered | False-success moment plus a separate recovery action and re-verification | 0:35–1:58 | API and browser tests show three outcomes and recovery; no outcome guarantee is claimed |
 
-## Stage 2 criteria
+## Eligibility and bonus boundary
 
-| Criterion | CloseLoop evidence | Exact proof | Strength | Limitation |
-|---|---|---|---|---|
-| Technical implementation | Seven closed-schema MCP tools; bearer-derived ownership; trusted confirmation; separate receipt/read-back; deterministic verdict; SQL/DynamoDB invariants; read-only MCP App | docs/architecture.md, docs/trust-model.md, 249-passed current recovery suite with Chromium browser regression, 0:45–2:45 video | Strong: cross-layer contracts and adversarial evidence | Live Alexa+, AWS, provider, and PostgreSQL remain unverified |
-| Design | Voice-first Ask → Confirm → Act → Observe → Follow Up → Resolve → Explain; three plain-language outcomes; expandable proof | Local recovery browser test; pre-recovery signed-out production baseline | Strong, coherent consumer story | Pre-recovery resolution UI is signed-out verified; recovery UI awaits deployment; no Alexa+ host rendering |
-| Potential impact | Prevents false completion for financial life-admin actions; preserves uncertainty rather than hiding it | False-success moment at 1:35; problem/solution copy | Specific, credible need with broad future applicability | Current executable provider covers subscription cancellation only |
-| Quality of idea | Separates executor from verdict authority and makes contradiction/uncertainty first-class; uses stateful MCP Apps rather than a Q&A wrapper | False-success evidence; deterministic verifier; proof card; security report | Distinct and memorable | Not a live multi-service provider workflow |
+The AWS Builder mapping is an evidence-based description of the Moto-tested DynamoDB repository path. It is not a claim of live AWS use or automatic bonus eligibility. Do not claim any bonus unless the official current rules and submitted evidence establish it.
 
-## AWS Builder positioning
+## Strongest judge moments
 
-DynamoDB owns a real product responsibility: authoritative owner-scoped lifecycle and evidence
-state across server instances. Strongly consistent reads prevent stale evidence from being treated
-as current. Conditional writes enforce expected version, allowed transition, confirmation
-consumption, and immutable terminal outcomes. The project deliberately excludes decorative
-Bedrock, AgentCore, Strands, Lambda, Step Functions, and EventBridge calls that would not improve
-the synchronous demo.
-
-## Highest-value judging moments
-
-1. **First 10 seconds:** “Alexa+ does not just take the action. CloseLoop owns the outcome until it is resolved.”
-2. **0:45:** execution claim and independent evidence visibly separated.
-3. **1:35:** provider says success, auto-renew is still on, and CloseLoop keeps the same resolution open.
-4. **2:05:** evidence outage becomes Awaiting proof, never invented certainty.
-5. **2:25:** seven-tool MCP, deterministic verifier, trusted confirmation, and DynamoDB-backed record contract (Moto-tested).
-
-## Submission risk
-
-The source package and signed-out deterministic Vercel demo are ready for an Alexa+ self-hosted-MCP
-entry, but live Alexa+ host behavior is not verified. The public browser calls an isolated deployed
-CloseLoop lifecycle/provider/read-back/verifier path and retains its simulation labels. A real Alexa+
-client/add-on connection would strengthen eligibility evidence but must not be claimed until
-actually exercised.
-
-## Outcome management / recovery evolution
-
-The Alexa+ consumer concept extends persistent verification with a bounded cancellation outcome contract, deterministic attention events and deduplication, a separately confirmed recovery action, independent reverification, and a post-deadline renewal-charge violation path. The existing seven MCP tools remain the surface: status/open/recent results carry authoritative contract, attention, recovery, and receipt views; `confirm_resolution_action` can authorize only an existing recovery ID with an action-specific attestation.
-
-The public `/demo/` includes recovery and outcome-violation stories alongside Verified, Not completed, and Awaiting proof. Browser requests submit only a bounded scenario selector. Provider/billing state changes, time progression, and spoken confirmations are simulated. No production scheduler, real subscription/refund provider, live Alexa+ session, live DynamoDB table, or Proactive Events delivery is claimed. The recovery build at commit `8af99db73a631821712b7e559ecf335b66ed80a8` is signed-out browser verified at the canonical production URL; the evidence covers the simulated demo only.
+1. **0:35–0:55:** Provider acceptance is visibly contradicted by the independent read-back.
+2. **1:15–1:58:** Recovery uses a separate authorization and is independently rechecked.
+3. **1:58–2:17:** The post-cancellation charge is preserved as an outcome violation; the refund draft is not sent.
+4. **2:17–2:45:** Consumer responsibility and trust explanation sit ahead of technical proof.

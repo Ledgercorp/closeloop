@@ -1,8 +1,8 @@
 # CloseLoop
 
-**CloseLoop is an outcome manager for Alexa+: it keeps responsibility for consequential requests until the real-world outcome is verified, then helps the user recover safely when reality does not cooperate.**
+**CloseLoop is an outcome-management layer for Alexa+: it keeps responsibility for consequential requests until independent evidence establishes what happened, and helps users recover safely when reality does not cooperate.**
 
-> Ask Alexa to handle it. CloseLoop keeps watch until it is done with proof.
+> Ask Alexa to handle it. CloseLoop checks what actually happened—and stays with the task when it does not go to plan.
 
 A provider receipt is a claim, not proof. CloseLoop preserves the request, confirmation, action claim, independent evidence, verification history, and follow-up schedule until the resolution has a justified outcome.
 
@@ -16,9 +16,9 @@ Deterministic code owns the evidence outcomes:
 
 If StreamBox accepts cancellation while auto-renew is still on, the resolution remains open: “StreamBox accepted the cancellation request, but auto-renew is still on. I’m not marking this resolved yet.” A later session retrieves the same resolution and can recheck it.
 
-Primary track: **Alexa+** · Mini challenge: **AWS Builder** · License: [Apache-2.0](LICENSE)
+Primary track: **Alexa+** · Mini challenge: **AWS Builder** · License: [Apache-2.0](LICENSE) · [Try the guided recovery demo](https://closeloop-zeta.vercel.app/demo/)
 
-The checked-in demo runs at `http://127.0.0.1:8000/demo/`. The existing hosted URL is not updated or re-verified by this repository change. No live Alexa+, provider, or AWS verification is claimed.
+The checked-in demo runs at `http://127.0.0.1:8000/demo/`. Verify each public release at the canonical URL in a signed-out browser; a successful build alone does not verify the consumer experience. No live Alexa+, provider, or AWS verification is claimed.
 
 ## Run the server-backed demo locally
 

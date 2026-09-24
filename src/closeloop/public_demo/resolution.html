@@ -29,30 +29,46 @@
     a { color: #176b4d; }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
   #outcome { white-space: pre-line; }
+
+ .other-scenarios { margin: 10px 0 20px; }
+ .other-scenarios summary { cursor: pointer; font-weight: 700; }
+ .scene.false-success { border: 2px solid #b94735; background: #fff4ef; }
+ .trust { margin-top: 36px; padding: 20px; border-radius: 16px; background: #eaf2ed; }
 </style>
 </head>
 <body>
 <main>
   <div class="eyebrow">Alexa+ · persistent resolution</div>
-  <h1>Ask Alexa to handle it. CloseLoop keeps watch.</h1>
+  <h1>Ask Alexa to handle it. CloseLoop checks whether it actually happened.</h1>
   <p class="lede">Ask naturally. CloseLoop follows through, tells you when it needs you, and keeps proof of what happened.</p>
   <div class="request">“Alexa, cancel StreamBox before next Friday and make sure I don’t get charged again.”</div>
   <p class="lede">Ask naturally: “What are you still handling for me?” · “Anything need my attention?” · “How do you know?”</p>
-  <div class="notice"><strong>Isolated simulation.</strong> CloseLoop runs its real lifecycle and verifier against a simulated provider. The demo advances time and simulates each spoken confirmation; it does not call Alexa+, a subscription provider, live AWS, or an automatic production scheduler.</div>
-  <p class="notice" id="confirmation">Waiting for your confirmation. No cancellation request has been sent.</p>
-  <button id="run">Confirm cancellation</button>
-  <button id="failure" class="secondary">See a verified not completed outcome</button>
-  <button id="outage" class="secondary">See when evidence is unavailable</button>
-<button id="recovery" class="secondary">See CloseLoop help recover</button>
-<button id="violation" class="secondary">See a renewal charge after cancellation</button>
+  <div class="notice"><strong>What’s real:</strong> CloseLoop’s server-side lifecycle, confirmation checks, verifier, attention, recovery authorization and recheck run as real code paths using isolated demo state. <strong>What’s simulated:</strong> StreamBox, billing, spoken Alexa interactions and time. Only the scenario is selected in the browser; CloseLoop generates the evidence and outcome server-side. No live Alexa+, AWS, or production scheduler is used.</div>
+  <p class="eyebrow">Recommended demo · false success → safe recovery → proof</p>
+ <section id="responsibility" class="notice" aria-live="polite">
+  <strong id="responsibility-label">What CloseLoop is handling</strong>
+  <p id="responsibility-copy">StreamBox is waiting for your confirmation. No cancellation request has been sent.</p>
+ </section>
+ <p class="notice" id="confirmation">Waiting for your confirmation. No cancellation request has been sent.</p>
+  <button id="recovery">Confirm cancellation and follow the recommended recovery story</button>
+ <details class="other-scenarios"><summary>Explore other outcomes</summary>
+ <button id="run" class="secondary">See cancellation verified without recovery</button>
+ <button id="failure" class="secondary">See evidence-backed failure</button>
+ <button id="outage" class="secondary">See when evidence is unavailable</button>
+ <button id="violation" class="secondary">See a renewal charge after cancellation</button>
+ </details>
   <p id="message" role="status" aria-live="polite"></p>
   <section id="story" aria-label="Resolution timeline"></section>
   <section id="outcome" class="outcome" hidden aria-live="polite"></section>
   <details id="proof" hidden>
-    <summary>View evidence and provenance</summary>
+    <summary>See proof</summary>
     <pre id="proof-data"></pre>
   </details>
   <p><a href="/demo/index.html">Open the technical evidence demo</a></p>
+ <section class="trust" aria-labelledby="trust-title">
+  <h2 id="trust-title">Why trust the result?</h2>
+  <p>Alexa, the provider, and a recovery action cannot mark this done. CloseLoop checks the account state separately. If evidence is missing, the request stays open. Consequential recovery needs a new confirmation.</p>
+ </section>
 </main>
 <script>
 const message = document.querySelector("#message");
@@ -61,6 +77,18 @@ const outcome = document.querySelector("#outcome");
 const proof = document.querySelector("#proof");
 const confirmation = document.querySelector("#confirmation");
 const buttons = [...document.querySelectorAll("button")];
+const scenePresentation = {
+ NORMAL_REQUEST: { label: "YOUR REQUEST", heading: "You asked Alexa to handle it", summary: "Cancel StreamBox before next Friday and make sure you don’t get charged again." },
+ ORIGINAL_ACTION: { label: "ACTION ACCEPTED", heading: "StreamBox accepted the cancellation", summary: "The cancellation request was sent once. Acceptance is a claim, not proof the account changed." },
+ FALSE_SUCCESS: { label: "CLOSELOOP CHECKED", heading: "Not resolved yet", summary: "StreamBox accepted the request, but auto-renew is still on. I’m keeping an eye on it." },
+ TIME_PASSES: { label: "SIMULATED TIME", heading: "Renewal is getting closer", summary: "Time advances in this demo; no production scheduler is running." },
+ ACTION_NEEDED: { label: "NEEDS YOUR ATTENTION", heading: "It renews tomorrow", summary: "I can prepare a support follow-up using the cancellation details already saved." },
+ RECOVERY_CONFIRMATION: { label: "NEW AUTHORIZATION", heading: "You approved a separate follow-up", summary: "This is a new action with new authorization. Checking did not repeat the cancellation." },
+ RECOVERY_EXECUTED: { label: "FOLLOW-UP PREPARED", heading: "Recovery action completed", summary: "The simulated support follow-up was prepared. Its receipt does not prove the subscription changed." },
+ REVERIFY: { label: "INDEPENDENT RECHECK", heading: "Checking the account again", summary: "CloseLoop checks the account state independently after recovery." },
+ RESOLUTION_RECEIPT: { label: "RESOLUTION RECEIPT", heading: "Verified canceled", summary: "Auto-renew is off. Your access ends October 3." },
+ OUTCOME_VIOLATION: { label: "OUTCOME VIOLATION", heading: "A renewal charge appeared after cancellation", summary: "The simulated billing observation is saved with the cancellation timeline. A refund request can be prepared, but is not sent." },
+};
 async function run(scenario) {
  buttons.forEach((button) => { button.disabled = true; });
  confirmation.textContent = "Confirmation submitted. Running the isolated simulation.";
@@ -92,10 +120,11 @@ async function run(scenario) {
     };
     for (const scene of result.lifecycle_story || []) {
       const card = document.createElement("article"); card.className = "scene";
+ if (scene.scene === "FALSE_SUCCESS") card.classList.add("false-success");
       const label = document.createElement("div"); label.className = "tag";
-      label.textContent = `${scene.session} · ${sceneLabels[scene.scene] || "Resolution update"}`;
-      const heading = document.createElement("h2"); heading.textContent = statusLabels[scene.lifecycle_state] || "Status unavailable";
-      const text = document.createElement("p"); text.textContent = scene.summary;
+      label.textContent = scenePresentation[scene.scene]?.label || "CLOSELOOP UPDATE";
+      const heading = document.createElement("h2"); heading.textContent = scenePresentation[scene.scene]?.heading || (scene.lifecycle_state ? (statusLabels[scene.lifecycle_state] || "Update") : "Update");
+      const text = document.createElement("p"); text.textContent = scene.utterance ? `“${scene.utterance}” ${scene.summary || scenePresentation[scene.scene]?.summary || ""}` : (scene.summary || scenePresentation[scene.scene]?.summary || "CloseLoop recorded an update.");
       card.append(label, heading, text);
       if (typeof scene.next_check_at === "string") {
         const nextCheck = document.createElement("p");
@@ -107,6 +136,11 @@ async function run(scenario) {
       story.append(card);
     }
     const status = result.resolution.lifecycle_state;
+ const responsibilityLabel = document.querySelector("#responsibility-label");
+ const responsibilityCopy = document.querySelector("#responsibility-copy");
+ responsibilityLabel.textContent = status === "AWAITING_PROOF" ? "CloseLoop is still watching" : status === "VERIFIED" ? "Closed with independent proof" : "Not completed";
+ responsibilityCopy.textContent = status === "AWAITING_PROOF" ? "The request is still open because fresh evidence has not established the outcome." : status === "VERIFIED" ? "StreamBox is independently verified canceled. Auto-renew is off; nothing remains open." : result.summary;
+
     outcome.hidden = false;
     const receipt = result.resolution.resolution_receipt;
     if (receipt) {

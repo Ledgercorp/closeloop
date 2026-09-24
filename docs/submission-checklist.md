@@ -1,92 +1,42 @@
-# Final submission checklist
+# Submission readiness checklist
 
-## Repository package
+## Repository and evidence
 
-- [x] Public GitHub repository contains all source, setup, demo, tests, infrastructure, and docs.
-- [x] Canonical Apache-2.0 text is stored in `LICENSE` and linked near the README opening.
-- [x] README communicates the value proposition in under 10 seconds.
-- [x] Seven MCP tools are documented; no verdict-write capability is claimed or exposed.
-- [x] Alexa+, AWS, browser, security, provider, and deployment claims use explicit verification labels.
-- [x] Build provenance distinguishes CloseLoop from prior CUF concepts/source.
-- [x] Product feedback answers use, strengths, shortcomings, onboarding, and reuse intent.
-- [x] Friction log contains only genuine reproduced issues and actionable recommendations.
-- [x] Submission copy and judging-rubric map avoid unbuilt Bedrock/AgentCore/Strands claims.
-- [x] Final focused checks, complete suite, diff review, and Governor review complete.
-- [x] Package commit/push and signed-out repository/license verification complete.
+- [x] Public GitHub repository contains source, setup, demo, tests, infrastructure, and documentation.
+- [x] Apache-2.0 license is present and linked from README.
+- [x] README and demo state the consumer value before implementation details.
+- [x] Seven MCP tools are documented; no verdict-write capability is exposed.
+- [x] Alexa+, AWS, provider, browser, security, and deployment claims are labeled by verification level.
+- [x] Build provenance separates CloseLoop work from prior concepts/source.
+- [x] Product feedback and friction logs preserve actual observations only.
+- [x] Submission copy, timed script, shot list, and documented-rubric map are prepared locally.
+- [x] Recovery and Outcome Violation release was deployed through the existing Vercel Git integration and exercised signed out.
 
-## Video recording checklist
+## Before recording
 
-- [ ] After deployment, open the persistent-resolution demo in a fresh signed-out browser and record the deployed commit.
-- [ ] Identify the provider and time progression as simulations; do not imply live Alexa+, AWS, or an automatic production scheduler.
-- [ ] Show the StreamBox request and waiting-confirmation state before any action.
-- [ ] Confirm once; show provider acceptance with auto-renew still on and the same resolution remaining open.
-- [ ] Return in a later session, recheck the same resolution, and show Verified with final evidence.
-- [ ] Show evidence-supported Not completed and explain that independent final evidence establishes failure.
-- [ ] Show the evidence-outage path remaining Awaiting proof.
-- [ ] Expand evidence/provenance and keep the demo under three minutes.
-- [ ] Use English and remove notifications, personal data, tokens, local paths, and private tabs.
-- [ ] Do not include unauthorized music, footage, logos, or other copyrighted/trademarked assets.
-- [ ] Review the exported file, upload it publicly, and verify playback signed out.
+- [ ] Open https://closeloop-zeta.vercel.app/demo/ in a clean signed-out browser.
+- [ ] Record the recommended guided recovery story from confirmation through independent recheck.
+- [ ] Capture the false-success contradiction and separate recovery authorization.
+- [ ] Show the receipt and expandable evidence briefly.
+- [ ] Show the alternate renewal-charge scenario; say the refund draft is unsent.
+- [ ] Identify simulated StreamBox, billing, time, and spoken Alexa interactions.
+- [ ] Do not imply live Alexa+, AWS, a production scheduler, real cancellation, or real refund.
+- [ ] Remove personal data, private tabs, credentials, and unrelated notifications.
+- [ ] Keep English narration/captions and use only authorized media.
+- [ ] Review the exported video and verify its public playback signed out.
 
-## Exact submission screenshots
+## Before submission
 
-Capture recovery evidence only after signed-out production checks verify the recovery release; the reconciled persistent-resolution baseline was verified, but recovery changes still need production checks. A successful deployment status alone is insufficient. Until then, use the local simulation and label it accordingly:
+- [ ] Recheck the current official competition rules and use only their exact criteria.
+- [ ] Add the final public video URL; none is recorded or uploaded by this task.
+- [ ] Review the submission preview signed out and test every public link.
+- [ ] Confirm required team, repository, demo, and contribution fields in the submission form.
+- [ ] State simulated provider, billing, time, and Alexa interactions clearly.
+- [ ] State Moto-tested DynamoDB is not live AWS.
+- [ ] Do not label the public demo as a live Alexa+ client experience.
 
-1. **Hero / confirmation:** initial state shows **Waiting for your confirmation** and that no cancellation request has been sent.
-2. **Primary result:** select **Confirm cancellation** and capture **Verified** plus the completed lifecycle.
-3. **False-success proof:** show the request remains open after provider acceptance and auto-renew still on; include its follow-up state.
-4. **Uncertainty proof:** select **See when evidence is unavailable** and capture “Awaiting proof.”
-5. **Provenance detail:** Verified result expanded to show action receipt, independent read-back,
-   deterministic verifier, timestamps, and identifiers.
-6. **Implemented architecture:** README “How it works” diagram, without aspirational services.
-7. **AWS proof:** `docs/aws-dynamodb.md` data/concurrency section plus the one-table
-   `infra/aws/closeloop-dynamodb.json` resource. Caption it **Moto-simulated; not live AWS**.
-8. **Test/security proof:** final terminal showing the complete passing count, plus the security
-   report’s findings summary. Do not expose test signing keys.
-9. **MCP discovery, if space allows:** seven-tool Inspector output and MCP Apps resource metadata.
-   Caption it **MCP integration verified locally; not a live Alexa+ client**.
+## Verified implementation and limitations
 
-## Devpost manual actions
-
-1. Sign in to Devpost, join the hackathon, and confirm entrant/team eligibility. If entering as a
-   team or organization, designate the authorized representative.
-2. Choose primary track **Alexa+** and mini challenge **AWS Builder**. Select Open Source only if
-   you also provide the required contribution URL, repository URL, GitHub username, and description.
-3. Paste the reviewed fields from `docs/submission-copy.md`; replace every bracketed placeholder.
-4. Add the public repository URL: `https://github.com/Ledgercorp/closeloop`.
-5. In GitHub’s About panel, confirm the repository is public, Apache-2.0 is detected/visible, and the
-   homepage points to the signed-out judge demo: `https://closeloop-zeta.vercel.app/demo/`.
-6. Add the final public YouTube/Vimeo URL and confirm duration, English audio/captions, permissions,
-   and signed-out playback.
-7. Upload the strongest screenshots above. Do not label local cards as Alexa+ host screenshots.
-8. Paste `docs/product-feedback.md` and the relevant `docs/friction-log.md` entries into the
-   product-feedback/friction fields; include DynamoDB use for AWS Builder.
-9. State plainly that the public browser demo calls an isolated server-side lifecycle/verifier with
-   a deterministic simulated provider and demo-only confirmation, DynamoDB is Moto-simulated,
-   Alexa+/MCP is locally integration verified, and live provider/Alexa+/AWS are not verified.
-10. If live public execution is later required, provision shared storage, OAuth/account linking,
-    and a trusted confirmation authority with production secrets. Never deploy the test or
-    recording signer. Re-run anonymous `/`, `/health`, `/demo/`, and unauthenticated `/mcp` checks.
-11. Review the submission preview in a signed-out browser. Test every repository, video, image, and
-    optional demo link; remove inaccessible links.
-12. Submit before **October 23, 2026 at 12:00 PM PDT** and save the final confirmation/receipt.
-
-## Current external blockers
-
-- A public video URL does not exist yet; recording/upload is a required manual action.
-- No real Alexa+ client/add-on/Local Inspector/account-linking lifecycle has been exercised.
-- The isolated server-backed judge demo is publicly verified; live provider-backed execution is not
-  deployed.
-- Safe public execution needs production shared storage, OAuth, and confirmation-authority
-  configuration that is not present in this environment.
-- Live AWS/DynamoDB remains unverified.
-
-Do not resolve these blockers by weakening confirmation, authorization, storage, or evidence rules.
-
-## Recovery evolution evidence
-- [x] Bounded cancellation request interpretation persists a server-derived outcome contract; unsupported request types fail closed.
-- [x] Attention and severity are deterministic, persisted, and deduplicated for unchanged conditions.
-- [x] Recovery is a separate target/action-bound record with a fresh confirmation, provider receipt, and independent reverification.
-- [x] Simulated renewal-charge evidence drives the genuine `NOT_COMPLETED` outcome and a separately confirmed refund-draft preparation; nothing is sent.
-- [x] Browser recovery/violation flows submit only the scenario selector; the verifier and evidence remain server-side.
-- [ ] Current recovery commit must be pushed and its deployment exercised signed out before describing these new recovery paths as publicly verified.
+- Seven MCP tools, deterministic three-outcome verifier, persistent resolution lifecycle, target-bound evidence, separate recovery confirmation, bounded rechecks, attention deduplication, and resolution receipts are implemented.
+- The public recovery and violation scenarios use simulated provider, billing, time, and spoken confirmations.
+- No live Alexa+ session, Alexa Proactive Events, production scheduler, provider, billing system, or AWS table was verified.
