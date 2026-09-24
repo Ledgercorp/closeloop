@@ -11,7 +11,7 @@ artifact.
 |---|---|---|---|---|
 | Alexa+ primary track | Self-hosted MCP server using Streamable HTTP and MCP 2025-11-25 | `src/closeloop/mcp_server.py`; `tests/test_alexa_integration.py`; 2:25 video | Strong local integration | No live Alexa+ client, add-on, Local Inspector, or account linking |
 | Runtime technology use | Official MCP Python SDK is imported and executes the seven-tool persistent lifecycle | `pyproject.toml`; `src/closeloop/mcp_server.py`; public server-backed demo | Strong local integration plus public deterministic demo | Public demo is isolated simulation; live MCP actions remain authenticated and are not publicly exercised |
-| Working demonstration | Persistent resolution, trusted confirmation, later-session retrieval, independent evidence, bounded recheck, and three deterministic outcomes use the real local CloseLoop lifecycle | Local /demo/ and API tests; demo script | Strong local end-to-end evidence | The persistent-resolution public deployment has not been verified; provider and confirmation remain simulations |
+| Working demonstration | Persistent resolution, trusted confirmation, later-session retrieval, independent evidence, bounded recheck, and three deterministic outcomes use the real local CloseLoop lifecycle | Local /demo/ and API tests; demo script | Strong local end-to-end evidence | The reconciled persistent-resolution baseline was signed-out verified; recovery changes await deployment; provider and confirmation remain simulations |
 | Public source and setup | Public GitHub repository, canonical Apache-2.0, quick-start commands | `README.md`; `LICENSE` | Strong; anonymous access and GitHub license detection verified | Public video remains a manual submission step |
 | Hackathon provenance | New CloseLoop code is separated from prior CUF concepts | `docs/build-provenance.md`; README provenance | Explicit | Prior conceptual experience is disclosed, not claimed as new |
 | Product feedback | Actual tooling attempts, successes, limits, and recommendations | `docs/product-feedback.md`; `docs/friction-log.md` | Detailed and reproducible | Some Alexa+/AWS tooling was inaccessible |
@@ -21,8 +21,8 @@ artifact.
 
 | Criterion | CloseLoop evidence | Exact proof | Strength | Limitation |
 |---|---|---|---|---|
-| Technical implementation | Seven closed-schema MCP tools; bearer-derived ownership; trusted confirmation; separate receipt/read-back; deterministic verdict; SQL/DynamoDB invariants; read-only MCP App | docs/architecture.md, docs/trust-model.md, 236-collected local suite (235 passed; one browser regression skipped because Playwright is unavailable), 0:45–2:45 video | Strong: cross-layer contracts and adversarial evidence | Live Alexa+, AWS, provider, and PostgreSQL remain unverified |
-| Design | Voice-first Ask → Confirm → Act → Observe → Follow Up → Resolve → Explain; three plain-language outcomes; expandable proof | Local persistent-resolution demo; historical prior-release browser evidence | Strong, coherent consumer story | Current persistent-resolution UI has not been checked at the public URL or in an Alexa+ host |
+| Technical implementation | Seven closed-schema MCP tools; bearer-derived ownership; trusted confirmation; separate receipt/read-back; deterministic verdict; SQL/DynamoDB invariants; read-only MCP App | docs/architecture.md, docs/trust-model.md, 249-passed current recovery suite with Chromium browser regression, 0:45–2:45 video | Strong: cross-layer contracts and adversarial evidence | Live Alexa+, AWS, provider, and PostgreSQL remain unverified |
+| Design | Voice-first Ask → Confirm → Act → Observe → Follow Up → Resolve → Explain; three plain-language outcomes; expandable proof | Local recovery browser test; pre-recovery signed-out production baseline | Strong, coherent consumer story | Pre-recovery resolution UI is signed-out verified; recovery UI awaits deployment; no Alexa+ host rendering |
 | Potential impact | Prevents false completion for financial life-admin actions; preserves uncertainty rather than hiding it | False-success moment at 1:35; problem/solution copy | Specific, credible need with broad future applicability | Current executable provider covers subscription cancellation only |
 | Quality of idea | Separates executor from verdict authority and makes contradiction/uncertainty first-class; uses stateful MCP Apps rather than a Q&A wrapper | False-success evidence; deterministic verifier; proof card; security report | Distinct and memorable | Not a live multi-service provider workflow |
 
@@ -50,3 +50,9 @@ entry, but live Alexa+ host behavior is not verified. The public browser calls a
 CloseLoop lifecycle/provider/read-back/verifier path and retains its simulation labels. A real Alexa+
 client/add-on connection would strengthen eligibility evidence but must not be claimed until
 actually exercised.
+
+## Outcome management / recovery evolution
+
+The Alexa+ consumer concept extends persistent verification with a bounded cancellation outcome contract, deterministic attention events and deduplication, a separately confirmed recovery action, independent reverification, and a post-deadline renewal-charge violation path. The existing seven MCP tools remain the surface: status/open/recent results carry authoritative contract, attention, recovery, and receipt views; `confirm_resolution_action` can authorize only an existing recovery ID with an action-specific attestation.
+
+The public `/demo/` includes recovery and outcome-violation stories alongside Verified, Not completed, and Awaiting proof. Browser requests submit only a bounded scenario selector. Provider/billing state changes, time progression, and spoken confirmations are simulated. No production scheduler, real subscription/refund provider, live Alexa+ session, live DynamoDB table, or Proactive Events delivery is claimed. The recovery build is locally verified but has not yet been deployed.

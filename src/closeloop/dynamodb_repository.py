@@ -101,9 +101,11 @@ class DynamoDbResolutionRepository:
                 f"resolution version does not match expected version: {record.resolution_id}"
             )
         validate_target_record(record)
-        predecessors = sorted(
-            allowed_previous_states(record.state), key=lambda state: state.value
-        )
+        same_state_update = record.state not in TERMINAL_STATES
+        predecessors = set(allowed_previous_states(record.state))
+        if same_state_update:
+            predecessors.add(record.state)
+        predecessors = sorted(predecessors, key=lambda state: state.value)
         if not predecessors:
             raise InvalidTransitionError(
                 f"no persisted state can transition to {record.state.value}"
@@ -115,16 +117,29 @@ class DynamoDbResolutionRepository:
         self._validate_item_size(item)
         values: dict[str, object] = {":expected_version": expected_version}
         values[":expected_history"] = expected_previous_history(record)
+        if same_state_update:
+            values[":same_state"] = record.state.value
+            values[":same_history"] = record_to_mapping(
+                record, serialize_datetimes=True
+            )["state_history"]
         state_tokens = []
         for index, state in enumerate(predecessors):
             token = f":previous_state_{index}"
             state_tokens.append(token)
             values[token] = state.value
+        transition_condition = (
+            f"(#state IN ({', '.join(state_tokens)}) "
+            "AND #history = :expected_history)"
+        )
+        if same_state_update:
+            transition_condition = (
+                f"({transition_condition} OR "
+                "(#state = :same_state AND #history = :same_history))"
+            )
         condition = (
             "attribute_exists(#owner) AND attribute_exists(#resolution) "
             "AND #version = :expected_version "
-            "AND #history = :expected_history "
-            f"AND #state IN ({', '.join(state_tokens)})"
+            f"AND {transition_condition}"
         )
         try:
             self._table.put_item(

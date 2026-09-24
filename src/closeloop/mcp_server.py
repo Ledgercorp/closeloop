@@ -156,6 +156,17 @@ def create_mcp_server(
                 ),
             ),
         ],
+        recovery_action_id: Annotated[
+            str | None,
+            Field(
+                default=None,
+                max_length=64,
+                description=(
+                    "Omit for the original cancellation. Supply only the exact recovery action ID "
+                    "shown by CloseLoop to confirm that separate action."
+                ),
+            ),
+        ] = None,
     ) -> ResolutionStatusOutput:
         """Execute a confirmed cancellation, independently verify it, and return the outcome.
 
@@ -164,14 +175,26 @@ def create_mcp_server(
         verifier and maps to Verified, Not completed, or Awaiting proof.
         """
 
-        result = _resolution_operation(
-            lambda: resolution_service.confirm_resolution_action(
-                principal_resolver(),
-                resolution_id,
-                confirmed,
-                confirmation_attestation,
+        principal = principal_resolver()
+        if recovery_action_id is not None:
+            result = _resolution_operation(
+                lambda: resolution_service.confirm_recovery_action(
+                    principal,
+                    resolution_id,
+                    recovery_action_id,
+                    confirmed=confirmed,
+                    confirmation_attestation=confirmation_attestation,
+                )
             )
-        )
+        else:
+            result = _resolution_operation(
+                lambda: resolution_service.confirm_resolution_action(
+                    principal,
+                    resolution_id,
+                    confirmed,
+                    confirmation_attestation,
+                )
+            )
         return ResolutionStatusOutput.model_validate(result)
 
     def recheck_resolution(resolution_id: ResolutionId) -> ResolutionStatusOutput:

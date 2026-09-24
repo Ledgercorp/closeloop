@@ -107,7 +107,7 @@ try {
   const response = await page.goto(url, { waitUntil: 'load' });
   check(response?.status() === 200, 'GET /demo/ did not return 200');
   check(
-    await page.getByText('Waiting confirmation', { exact: false }).isVisible(),
+      await page.getByText('Waiting for your confirmation', { exact: false }).isVisible(),
     'initial confirmation gate is not visible'
   );
   check(posts.length === 0, 'a cancellation request ran before confirmation');
@@ -131,6 +131,15 @@ try {
   }
 
   const verified = await runScenario('#run', 'persistent_resolution', 'VERIFIED', 'PASS');
+  check(
+    verified.resolution.resolution_receipt?.outcome === 'Canceled' &&
+      verified.resolution.resolution_receipt?.effective_end_date === '2026-10-03',
+    'verified result did not include its persisted resolution receipt'
+  );
+  check(
+    (await page.locator('#outcome').innerText()).includes('October 3'),
+    'consumer receipt did not render the access end date'
+  );
   check(verified.lifecycle_story.length >= 6, 'persistent story is missing lifecycle scenes');
   check(
     verified.lifecycle_story.some((scene) => scene.session === 'Later session'),
@@ -158,6 +167,28 @@ try {
     'Not completed did not have fresh readable contradictory evidence'
   );
 
+  check(
+    failed.resolution.resolution_receipt?.recorded_at &&
+      !('verified_at' in failed.resolution.resolution_receipt),
+    'Not completed receipt used a success-only verification timestamp'
+  );
+  check(
+    !(await page.locator('#outcome').innerText()).includes('Verified') &&
+      (await page.locator('#message').innerText()).includes('Not completed'),
+    'Not completed screen contradicted its terminal outcome'
+  );
+  const recovery = await runScenario('#recovery', 'recovery_loop', 'VERIFIED', 'PASS');
+  check(
+    recovery.lifecycle_story.some((scene) => scene.scene === 'RECOVERY_CONFIRMATION') &&
+      recovery.lifecycle_story.some((scene) => scene.scene === 'RESOLUTION_RECEIPT'),
+    'recovery confirmation or receipt was not shown'
+  );
+  const violation = await runScenario('#violation', 'outcome_violation', 'NOT_COMPLETED', 'FAIL');
+  check(
+    violation.lifecycle_story.some((scene) => scene.scene === 'OUTCOME_VIOLATION') &&
+      violation.summary.includes('19.99') && violation.summary.includes('nothing was sent'),
+    'outcome violation did not produce evidence-backed recovery copy'
+  );
   const unknown = await runScenario('#outage', 'evidence_outage', 'AWAITING_PROOF', 'INCONCLUSIVE');
   check(unknown.resolution.is_terminal === false, 'evidence outage became terminal');
   check(unknown.resolution.next_check_at !== null, 'evidence outage lost its next-check metadata');

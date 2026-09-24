@@ -65,6 +65,15 @@ class ResolutionStatusOutput(AlexaContract):
     updated_at: str
     confirmed_at: str | None
     resolution_reason: str | None
+    outcome_contract: dict[str, object] | None = Field(
+        default=None, description="Server-interpreted bounded outcome contract."
+    )
+    open_loop_summary: str = Field(default="", description="Plain-language summary of what CloseLoop is still handling.")
+    attention: dict[str, object] = Field(default_factory=dict, description="Deterministic attention class and reason.")
+    recovery_proposal: dict[str, object] | None = Field(default=None, description="Bound recovery proposal requiring separate confirmation.")
+    recovery_actions: list[dict[str, object]] = Field(default_factory=list)
+    outcome_violations: list[dict[str, object]] = Field(default_factory=list)
+    resolution_receipt: dict[str, object] | None = Field(default=None)
 
 
 class ExecutionClaimOutput(AlexaContract):
@@ -148,6 +157,10 @@ class ResolutionEvidenceOutput(AlexaContract):
     state_history: list[StateTransitionOutput]
     verification_history: list[VerificationAttemptOutput]
     target_identity: ResourceIdentityOutput
+    outcome_contract: dict[str, object] | None = None
+    attention_events: list[dict[str, object]] = Field(default_factory=list)
+    recovery_actions: list[dict[str, object]] = Field(default_factory=list)
+    outcome_violations: list[dict[str, object]] = Field(default_factory=list)
 
 
 class OpenResolutionsOutput(AlexaContract):

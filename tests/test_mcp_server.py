@@ -108,6 +108,7 @@ def test_exact_mcp_surface_is_registered_and_callable(tmp_path):
                 "resolution_id",
                 "confirmed",
                 "confirmation_attestation",
+                "recovery_action_id",
             }
             assert set(confirm_input_schema["required"]) == {
                 "resolution_id",

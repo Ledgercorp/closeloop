@@ -117,3 +117,18 @@ packaging, providers, or new features.
 ## Persistent recheck attacks
 
 The new SQLite tests attempt a stale scheduled timestamp, replay of a consumed schedule, two concurrent recheck claims, restart while a verification is persisted in `VERIFYING`, and maximum-attempt exhaustion. The expected behavior is one winning check claim, no repeated cancellation, preserved historical evidence, and no terminal success without fresh valid read-back. A check failure or exhausted budget remains open as `AWAITING_PROOF`.
+
+## Closed-loop recovery security review
+
+New automated coverage exercises:
+
+- Original cancellation attestation reused for recovery: rejected because its action and canonical digest do not match the recovery action.
+- Different owner, resolution, action type, or recovery ID: owner-scoped lookup and bound attestation checks reject the request before provider execution.
+- Duplicate recovery call/replayed token: the action leaves `AWAITING_CONFIRMATION` before the provider call; duplicate execution is rejected. The original cancellation remains at one execution.
+- Provider says recovery succeeded but independent read-back still shows auto-renew enabled: resolution remains `AWAITING_PROOF`; recovery receipt is preserved as a claim.
+- Concurrent lifecycle/recheck and durable version checks remain covered by SQLite and Moto repository tests.
+- Attention condition repeated unchanged: dedupe key prevents repeated event/proposal creation.
+- Billing observation must match owner, resolution, target digest, event type/source, positive supported amount/currency, deadline, and freshness window; the deterministic verifier re-evaluates it before FAIL.
+- Public browser payload remains scenario-only, including recovery and outcome-violation selections; UI has no verdict, evidence, target, identity, or terminal-state input.
+
+The demo confirmation signer and provider/billing events are isolated simulations. These tests do not establish production Alexa authorization, live provider behavior, a live AWS deployment, or production notification delivery.

@@ -136,18 +136,18 @@ claims until the customer-visible outcome is independently observed.
 
 ## Testing and evidence summary
 
-- Reconciled complete suite: **235 passed, 0 failed, 1 skipped** (236 collected). The browser regression was skipped because Playwright is unavailable in this environment; the prior release QA baseline was 218 passed.
+- Current recovery working tree: **249 passed, 0 failed, 0 skipped** with Playwright/Chromium enabled. The pre-recovery baseline had 235 passed and one browser test skipped before Playwright was installed.
 - Focused confirmation-attestation: **31 passed**.
 - General adversarial/security: **78 passed**.
 - AWS/lifecycle/verifier: **46 passed**.
 - Alexa+/MCP: **12 passed**.
 - Proof-card/UI: **16 passed**.
 - Canonical demo: PASS → Verified; FAIL → Not completed; INCONCLUSIVE → Awaiting proof.
-- Browser: **LOCAL UI/BROWSER VERIFIED** for the persistent-resolution flow. Historical public browser verification covers the prior release only; it does not verify the current page.
+- Browser: **LOCAL UI/BROWSER VERIFIED** for persistent resolution, recovery, and violation flows. Production checks below cover only the reconciled pre-recovery release until the recovery commit is deployed.
   deployed isolated server lifecycle/verifier.
 - Alexa+: **INTEGRATION VERIFIED locally; live NOT VERIFIED**.
 - AWS: **SIMULATED; live NOT VERIFIED**.
-- Public deployment: **NOT VERIFIED** for the persistent-resolution build. Historical signed-out evidence applies to the prior release only.
+- Public deployment: the reconciled persistent-resolution baseline was signed-out verified; the current recovery evolution remains **NOT VERIFIED IN PRODUCTION** until its own commit is deployed and exercised.
 
 ## Submission links
 
@@ -156,3 +156,7 @@ claims until the customer-visible outcome is independently observed.
 - Public demo: **https://closeloop-zeta.vercel.app/demo/**
 - Primary track: **Alexa+**
 - Mini challenge: **AWS Builder**
+
+## Outcome management and recovery claim
+
+CloseLoop is an outcome-management layer for Alexa+: it keeps ownership of a consequential request until independent evidence shows the result, then helps the user recover safely when reality does not cooperate. The cancellation demo has a bounded supported intent, persisted outcome contract, deterministic attention-event deduplication, separately confirmed simulated follow-up, independent reverification, and a deadline-bound simulated renewal-charge violation that prepares a refund-request draft without sending it. The lifecycle and verifier run locally; attention delivery to Alexa, provider/billing changes, and spoken consent are not live integrations. It is not a real refund service, billing monitor, production scheduler, live Alexa+ integration, or live AWS deployment.

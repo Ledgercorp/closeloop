@@ -5,7 +5,7 @@
 - [x] Public GitHub repository contains all source, setup, demo, tests, infrastructure, and docs.
 - [x] Canonical Apache-2.0 text is stored in `LICENSE` and linked near the README opening.
 - [x] README communicates the value proposition in under 10 seconds.
-- [x] Six MCP tools are documented; no verdict-write capability is claimed or exposed.
+- [x] Seven MCP tools are documented; no verdict-write capability is claimed or exposed.
 - [x] Alexa+, AWS, browser, security, provider, and deployment claims use explicit verification labels.
 - [x] Build provenance distinguishes CloseLoop from prior CUF concepts/source.
 - [x] Product feedback answers use, strengths, shortcomings, onboarding, and reuse intent.
@@ -30,12 +30,12 @@
 
 ## Exact submission screenshots
 
-Capture only after signed-out production checks verify the persistent-resolution release; a successful deployment status alone is insufficient. Until then, use the local simulation and label it accordingly:
+Capture recovery evidence only after signed-out production checks verify the recovery release; the reconciled persistent-resolution baseline was verified, but recovery changes still need production checks. A successful deployment status alone is insufficient. Until then, use the local simulation and label it accordingly:
 
 1. **Hero / confirmation:** initial state shows **Waiting for your confirmation** and that no cancellation request has been sent.
-2. **Primary result:** select **Confirm and play the resolution** and capture **Verified** plus the completed lifecycle.
+2. **Primary result:** select **Confirm cancellation** and capture **Verified** plus the completed lifecycle.
 3. **False-success proof:** show the request remains open after provider acceptance and auto-renew still on; include its follow-up state.
-4. **Uncertainty proof:** select See when proof is unavailable and capture “Awaiting proof.”
+4. **Uncertainty proof:** select **See when evidence is unavailable** and capture “Awaiting proof.”
 5. **Provenance detail:** Verified result expanded to show action receipt, independent read-back,
    deterministic verifier, timestamps, and identifiers.
 6. **Implemented architecture:** README “How it works” diagram, without aspirational services.
@@ -82,3 +82,11 @@ Capture only after signed-out production checks verify the persistent-resolution
 - Live AWS/DynamoDB remains unverified.
 
 Do not resolve these blockers by weakening confirmation, authorization, storage, or evidence rules.
+
+## Recovery evolution evidence
+- [x] Bounded cancellation request interpretation persists a server-derived outcome contract; unsupported request types fail closed.
+- [x] Attention and severity are deterministic, persisted, and deduplicated for unchanged conditions.
+- [x] Recovery is a separate target/action-bound record with a fresh confirmation, provider receipt, and independent reverification.
+- [x] Simulated renewal-charge evidence drives the genuine `NOT_COMPLETED` outcome and a separately confirmed refund-draft preparation; nothing is sent.
+- [x] Browser recovery/violation flows submit only the scenario selector; the verifier and evidence remain server-side.
+- [ ] Current recovery commit must be pushed and its deployment exercised signed out before describing these new recovery paths as publicly verified.

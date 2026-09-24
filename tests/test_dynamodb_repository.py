@@ -147,7 +147,7 @@ def test_stale_writer_and_terminal_overwrite_fail_atomically(aws_resource):
     with pytest.raises(ConcurrentResolutionUpdateError, match="another instance"):
         repository_b.save_owned(record_b, expected_version=record_b.version)
 
-    terminal_started = service.start_resolution(OWNER_A, "terminal record")
+    terminal_started = service.start_resolution(OWNER_A, "Cancel subscription for terminal record")
     service.confirm_resolution_action(
         OWNER_A,
         terminal_started["resolution_id"],
@@ -156,7 +156,7 @@ def test_stale_writer_and_terminal_overwrite_fail_atomically(aws_resource):
     )
     terminal = repository_a.get_owned(terminal_started["resolution_id"], OWNER_A)
     version = terminal.version
-    template_started = service.start_resolution(OWNER_A, "replacement attempt")
+    template_started = service.start_resolution(OWNER_A, "Cancel subscription for replacement attempt")
     replacement = repository_a.get_owned(template_started["resolution_id"], OWNER_A)
     replacement.resolution_id = terminal.resolution_id
     replacement.version = version
@@ -215,16 +215,16 @@ def test_requests_use_conditions_consistent_reads_and_paginated_created_order(aw
     spy = _PagedTable(aws_resource.Table(TABLE_NAME))
     repository = repository_for(_ResourceWrapper(spy))
     service = ResolutionService(repository)
-    first = service.start_resolution(OWNER_A, "first")
-    terminal = service.start_resolution(OWNER_A, "terminal")
+    first = service.start_resolution(OWNER_A, "Cancel subscription first")
+    terminal = service.start_resolution(OWNER_A, "Cancel subscription terminal")
     service.confirm_resolution_action(
         OWNER_A,
         terminal["resolution_id"],
         confirmed=True,
         confirmation_attestation=trusted_confirmation(terminal, OWNER_A),
     )
-    second = service.start_resolution(OWNER_A, "second")
-    third = service.start_resolution(OWNER_A, "third")
+    second = service.start_resolution(OWNER_A, "Cancel subscription second")
+    third = service.start_resolution(OWNER_A, "Cancel subscription third")
 
     open_records = service.list_open_resolutions(OWNER_A, limit=2)
     assert [item["resolution_id"] for item in open_records] == [
@@ -402,3 +402,19 @@ def test_blank_explicit_dynamodb_configuration_fails_closed(monkeypatch):
     assert isinstance(repository, UnavailableResolutionRepository)
     with pytest.raises(ResolutionStorageUnavailableError, match="non-empty"):
         repository.list_open_owned(OWNER_A, 50)
+
+
+def test_dynamodb_allows_versioned_nonterminal_metadata_update_without_fake_transition(aws_resource):
+    repository = repository_for(aws_resource)
+    service = ResolutionService(repository)
+    started = service.start_resolution(OWNER_A, INTENT)
+    record = repository.get_owned(started["resolution_id"], OWNER_A)
+    original_history = list(record.state_history)
+    record.resolution_reason = "Persisted recovery metadata update"
+
+    repository.save_owned(record, expected_version=record.version)
+
+    stored = repository.get_owned(started["resolution_id"], OWNER_A)
+    assert stored.resolution_reason == "Persisted recovery metadata update"
+    assert stored.state_history == original_history
+    assert stored.version == record.version == 1

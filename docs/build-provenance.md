@@ -31,3 +31,7 @@ No CUF source code is currently copied into this repository.
 ## Persistent resolution evolution (2026-09-24)
 
 This product evolution was implemented in the existing CloseLoop repository and architecture. It adds durable open `AWAITING_PROOF`, bounded read-only rechecks, verification-attempt history, recent-resolution retrieval, an explicit MCP recheck tool, and a simulated later-session public demo. The original deterministic verifier and signed confirmation boundary remain the authority for outcomes and execution. No CUF source was copied; no history was rewritten. Additional resolution kinds are domain-model values only; cancellation is still the only executable workflow. AWS behavior was locally tested with Moto, not a live AWS account; no Alexa+ device/session was used.
+
+## Closed-loop recovery evolution
+
+The current working-tree evolution builds on the reconciled persistent-resolution commit. It adds a bounded cancellation `OutcomeContract`, deterministic attention and deduplication, a separate signed-confirmation boundary for simulated recovery actions, recovery provenance, independent reverification, and correlated simulated post-deadline billing evidence. It reuses the existing resolution repository and verifier and does not add an AWS service or copy earlier CUF source. The public `/demo/` exposes only bounded scenario selectors; its provider, billing observations, time progression, and spoken confirmations are simulated. The recovery diff is not publicly verified until its own commit is deployed and exercised.

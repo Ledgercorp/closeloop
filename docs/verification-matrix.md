@@ -17,15 +17,16 @@ Labels describe evidence actually established; they are not interchangeable.
 | Adversarial/security | **PARTIALLY ADVERSARIAL VERIFIED** | 31 confirmation plus 78 general adversarial cases; seven blocking findings fixed; Governor final review | No formal penetration, load/DoS, live identity, live cloud, or network-partition testing |
 | Demo provider | **SIMULATED** | Deterministic healthy, false-success, evidence-outage, and terminal-failure modes traverse the real adapter/lifecycle/verifier path | No real subscription account or third-party provider |
 | Public repository | **VERIFIED** | Anonymous GitHub and raw-content requests returned 200; GitHub detects Apache-2.0 and the public license matches canonical bytes | Submission video remains a separate manual publication step |
-| Persistent demo API flow (local) | **INTEGRATION VERIFIED** | Local API tests exercise the real lifecycle, isolated simulated provider, independent read-back, deterministic verifier, and server-generated result; requests accept only a bounded scenario selector | Temporary SQLite and simulated provider only; browser test skipped because Playwright is unavailable; current public deployment unverified |
+| Persistent demo API flow (local) | **BROWSER VERIFIED LOCALLY** | API and Chromium tests exercise the lifecycle, simulated provider, independent read-back, deterministic verifier, three outcomes, recovery/violation stories, and scenario-only requests | Temporary SQLite and simulated provider only |
 | Previous public demo release | **HISTORICAL UI/BROWSER VERIFIED** | Deployment dpl_7qzhdU8867s5w6yQZKCY2hU124AA for commit 5c36387 was checked signed out; Chromium and Playwright WebKit iPhone emulation exercised the then-current demo, including without DecompressionStream | This predates persistent resolutions and does not verify the current /demo/ experience or API |
-| Persistent-resolution public deployment | **NOT VERIFIED** | No signed-out production route, lifecycle, responsive, or browser checks have been run against the persistent-resolution build | No live Alexa+, provider, production scheduler, or AWS claim; publication alone would not establish product behavior |
+| Reconciled persistent-resolution deployment baseline | **SIGNED-OUT VERIFIED** | `e38bff72616faaa536bdccbf72419a26fdc6c77f` `/demo/` returned 200; Chromium exercised Verified, Not completed, and Awaiting proof; 390/820/1280 widths had no overflow; no page errors | Does not verify the recovery changes |
 | Live AWS | **NOT VERIFIED** | None claimed | Credentials, table, IAM, and CloudFormation execution unavailable |
 | Live Alexa+ | **NOT VERIFIED** | None claimed | Partner tooling, onboarding, public endpoint, OAuth, confirmation authority, and host rendering unavailable |
 
 ## Final evidence counts
 
-- Reconciled full suite (2026-09-24): **235 passed, 0 failed, 1 skipped** (236 collected). The browser regression was skipped because Playwright is unavailable; the incoming local evolution baseline was 232 passed with no skips.
+- Current recovery working tree (2026-09-24): **249 passed, 0 failed, 0 skipped** with Playwright enabled; full suite and Chromium browser regression passed.
+- Reconciled pre-recovery baseline: **235 passed, 0 failed, 1 skipped** (236 collected); its browser regression was skipped before Playwright was installed.
 - Focused MCP/Alexa contract and demo API suite: **49 passed, 0 failed, 0 skipped**.
 - Previous milestone counts below are historical and predate this evolution (pre-integration deployment baseline: 187; Milestone 7 baseline: 183; previous full-suite total: 214).
 - Previous public demo API/browser/security: **27 passed**; existing MCP/demo cases: **12 passed**; combined focused checkpoint: **39 passed**.
@@ -45,4 +46,18 @@ DynamoDB follow-up metadata and conditional updates are covered through Moto-bac
 
 ## Current repository/demo state (2026-09-24)
 
-The checked-in /demo/ page now leads with the persistent-resolution story. The prior Vercel result covers an older release only; no signed-out production browser or route check has been run against the persistent-resolution build. Current verification is local. On 2026-09-24, a local browser run showed the initial confirmation gate, the full resolution timeline with simulated next-check time, and the evidence-outage path remaining open. The updated public page was not tested in an Alexa+ host.
+The signed-out production baseline at `e38bff72616faaa536bdccbf72419a26fdc6c77f` was checked on 2026-09-24: `/demo/` was public, the three lifecycle/verdict outcomes were correct, representative widths had no overflow, and Chromium reported no page errors. Those checks do not include the recovery evolution. The updated page was not tested in an Alexa+ host.
+
+## Closed-loop recovery evolution status
+
+| Surface | Status | Evidence | Limitation |
+|---|---|---|---|
+| Bounded outcome interpretation | **LOCALLY VERIFIED** | Supported cancellation contract and unsupported task rejection tests | Only cancellation intents and deadline phrases are interpreted; no universal language compiler |
+| Attention-event dedupe | **LOCALLY VERIFIED** | Deadline/evidence-derived severity and unchanged-condition suppression tests | Events are persisted; no Alexa delivery adapter or production notifications |
+| Recovery authorization/execution | **LOCALLY VERIFIED** | Separate recovery confirmation, original-token rejection, owner/action/target binding, duplicate/concurrent rejection, receipt/evidence separation | Simulated provider only; a crash after `EXECUTING` can require operator recovery; no automatic replay |
+| Recovery reverification | **LOCALLY VERIFIED** | Browser and lifecycle tests show claimed follow-up cannot self-certify; fresh read-back yields PASS or remains INCONCLUSIVE | Production worker/scheduler not implemented |
+| Outcome violation | **LOCALLY VERIFIED** | Correlated simulated post-deadline charge produces FAIL/Not completed, URGENT event, and separately confirmed unsent draft | No bank or billing-account access; no actual refund request sent |
+| Recovery and violation browser flow | **BROWSER VERIFIED LOCALLY** | Chromium Playwright regression exercises both flows, viewport overflow, proof disclosure, and scenario-only request bodies | Production recovery build not yet deployed/exercised |
+| Prior public deployment baseline | **SIGNED-OUT VERIFIED** | Reconciled `e38bff72616faaa536bdccbf72419a26fdc6c77f` was exercised at `/demo/` | Does not cover current recovery changes |
+| Current recovery deployment | **NOT VERIFIED** | Recovery changes are not yet deployed | Push to the existing project, then repeat signed-out judge-style checks |
+| Live scheduler / proactive delivery | **NOT IMPLEMENTED / NOT VERIFIED** | No scheduler worker or Alexa notification adapter is active | EventBridge Scheduler/Lambda delivery and Alexa Proactive Events remain roadmap |

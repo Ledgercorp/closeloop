@@ -142,3 +142,13 @@ without a current consumer benefit.
 A recheck claims `VERIFYING` through an owner/version/state-conditional save before read-back. Scheduled calls must present the exact `next_check_at` token; duplicate or stale schedules fail. User-triggered MCP rechecks may bypass the wait time but not the attempt budget. Rechecks call only the independent provider read path. A stale `VERIFYING` record can be resumed after five minutes without replaying the original action. Four total observations are allowed, including the initial check; exhaustion leaves the task open with no next scheduled attempt.
 
 The public journey uses a temporary SQLite file and a second service instance to demonstrate persistence across an explicitly simulated session boundary. Time advancement and provider-state change are deterministic demo behavior. No production scheduler or worker is present.
+
+## Outcome management and closed-loop recovery
+
+The bounded intent interpreter supports subscription cancellation and persists an `OutcomeContract` containing the desired `auto_renew == false` state, an optional Friday/tomorrow deadline, independent-read requirement, prohibited renewal-charge outcome, and user-confirmation recovery policy. Unsupported task types fail closed; this is not a general natural-language contract compiler.
+
+The attention policy derives SILENT, INFORMATIONAL, ACTION_NEEDED, or URGENT from stored contract/evidence and deadline proximity. A persisted dedupe key suppresses repeated notices for an unchanged condition. On an eligible open resolution, CloseLoop may persist a target-bound `RecoveryAction`. A second attestation is bound to the exact recovery ID, owner, resolution, target digest, action type, and expiry. The provider receipt is recorded as a claim; recovery does not set a verdict or repeat cancellation. A later independent read-back still determines the original resolution.
+
+The recovery and post-deadline renewal-charge scenes use a deterministic simulated provider and simulated spoken confirmation in `/demo/`. Billing observation must be correlated to the original owner, resolution, target, prohibited outcome, and deadline before the verifier can return FAIL. The violation, receipt, attention history, and recovery provenance are projected from persisted records. No refund is sent.
+
+Recovery metadata may be version-updated while a resolution remains in a nonterminal state without appending a fake lifecycle transition. The SQL and DynamoDB conditional writes still check owner, version, current state, and exact state history. Terminal VERIFIED and NOT_COMPLETED rows remain immutable. A due-check worker and Alexa notification adapter are roadmap; no production scheduler or live Alexa Proactive Events delivery is implemented.

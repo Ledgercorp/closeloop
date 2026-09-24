@@ -122,3 +122,15 @@ INCONCLUSIVE covers unavailable, stale, malformed, or incomplete evidence. Fresh
 
 
 Cancellation `FAIL` requires a valid accepted execution receipt plus readable, fresh, target-correlated independent evidence showing auto-renew remains enabled on the final scheduled observation after the bounded four-check window has elapsed; attempt-count exhaustion alone never establishes failure. Earlier contradiction remains `AWAITING_PROOF`; provider rejection or unavailable, stale, malformed, contradictory, or wrong-target evidence cannot establish failure.
+
+## Recovery and attention boundary
+
+- Only bounded cancellation wording is interpreted into an executable `OutcomeContract`; unsupported or ambiguous request types are rejected. The interpreter proposes structured fields but cannot make a verdict.
+- Attention class and dedupe key are deterministic outputs from persisted contract, lifecycle state, fresh independent evidence, and deadline. An MCP/browser caller cannot submit an `AttentionEvent` or choose its severity.
+- A recovery proposal is not authorization. Recovery has a separate action digest and requires a fresh signed attestation bound to the recovery action ID, owner, resolution, target, action type, and expiry. Reusing the original cancellation attestation or another recovery's attestation fails.
+- Recovery execution is claimed in durable state before its provider call. Retries and concurrent requests cannot execute that recovery twice. An ambiguous provider error is stored as failed/unknown and is not retried automatically.
+- A process crash after persisting `EXECUTING` but before recording the provider result can leave the recovery action in `EXECUTING`; automatic replay/recovery is intentionally absent, so this requires future operator recovery tooling.
+- A recovery receipt cannot write `PASS`, `FAIL`, or resolution state. The original cancellation action remains single-execution; rechecks are observational and a fresh independent account read is still required to verify the outcome.
+- Billing violation observations are accepted only when source, event type, amount, currency, owner, resolution, target digest, event time, and contract deadline satisfy the evidence contract. They are re-evaluated by the deterministic verifier and cannot be supplied through the public demo request.
+- Nonterminal recovery metadata uses an owner/version/state/history conditional update without adding a fictitious resolution transition. Terminal rows remain immutable. Demo recovery consent and provider/billing events are simulated, not production attestations or connected accounts.
+- Notification suppression is keyed to severity and reason. The same unchanged condition does not generate a second persisted event; escalation or completion can produce a materially different event.

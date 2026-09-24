@@ -338,6 +338,6 @@ def test_evidence_history_from_another_resolution_cannot_be_stored(tmp_path):
     target.verified_at = source.verified_at
     target.verification_history = source.verification_history
 
-    with pytest.raises(InvalidTransitionError, match="transition"):
+    with pytest.raises(InvalidTransitionError):
         repository.save_owned(target, expected_version=target.version)
     assert repository.get_owned(second["resolution_id"], OWNER).independent_evidence.account_readable is False

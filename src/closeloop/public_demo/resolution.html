@@ -28,19 +28,23 @@
     pre { overflow: auto; padding: 16px; border-radius: 12px; background: #10251f; color: #e1f1e8; font-size: .8rem; }
     a { color: #176b4d; }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
-  </style>
+  #outcome { white-space: pre-line; }
+</style>
 </head>
 <body>
 <main>
   <div class="eyebrow">Alexa+ · persistent resolution</div>
-  <h1>CloseLoop stays with the outcome.</h1>
-  <p class="lede">Alexa+ can take the action. CloseLoop keeps checking until independent evidence shows what actually happened.</p>
-  <div class="request">“Alexa, cancel StreamBox before Friday and make sure it actually happens.”</div>
-  <div class="notice"><strong>Local simulation.</strong> The demo runs the real CloseLoop lifecycle against a simulated provider and a temporary SQLite store. It recreates a later session and clock advance; it does not call Alexa+, a subscription provider, or live AWS.</div>
+  <h1>Ask Alexa to handle it. CloseLoop keeps watch.</h1>
+  <p class="lede">Ask naturally. CloseLoop follows through, tells you when it needs you, and keeps proof of what happened.</p>
+  <div class="request">“Alexa, cancel StreamBox before next Friday and make sure I don’t get charged again.”</div>
+  <p class="lede">Ask naturally: “What are you still handling for me?” · “Anything need my attention?” · “How do you know?”</p>
+  <div class="notice"><strong>Isolated simulation.</strong> CloseLoop runs its real lifecycle and verifier against a simulated provider. The demo advances time and simulates each spoken confirmation; it does not call Alexa+, a subscription provider, live AWS, or an automatic production scheduler.</div>
   <p class="notice" id="confirmation">Waiting for your confirmation. No cancellation request has been sent.</p>
-  <button id="run">Confirm and play the resolution</button>
+  <button id="run">Confirm cancellation</button>
   <button id="failure" class="secondary">See a verified not completed outcome</button>
-  <button id="outage" class="secondary">See when proof is unavailable</button>
+  <button id="outage" class="secondary">See when evidence is unavailable</button>
+<button id="recovery" class="secondary">See CloseLoop help recover</button>
+<button id="violation" class="secondary">See a renewal charge after cancellation</button>
   <p id="message" role="status" aria-live="polite"></p>
   <section id="story" aria-label="Resolution timeline"></section>
   <section id="outcome" class="outcome" hidden aria-live="polite"></section>
@@ -104,18 +108,38 @@ async function run(scenario) {
     }
     const status = result.resolution.lifecycle_state;
     outcome.hidden = false;
-    outcome.textContent = status === "VERIFIED" ? result.lifecycle_story.at(-1).summary
-      : status === "AWAITING_PROOF" ? "The request was sent, but CloseLoop still can’t verify the result. The resolution remains open."
-      : result.summary;
+    const receipt = result.resolution.resolution_receipt;
+    if (receipt) {
+      const lines = [receipt.title, receipt.outcome, receipt.summary];
+      if (receipt.effective_end_date) {
+        const endDate = new Date(`${receipt.effective_end_date}T12:00:00`);
+        lines.push(`Your access ends ${new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric" }).format(endDate)}.`);
+      }
+      if (receipt.recorded_at) {
+        const date = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(receipt.recorded_at));
+        lines.push(`${receipt.outcome === "Canceled" ? "Verified" : "Recorded"} ${date}.`);
+      }
+      outcome.textContent = lines.filter(Boolean).join("\n\n");
+    } else {
+      outcome.textContent = status === "AWAITING_PROOF"
+        ? "The request was sent, but CloseLoop still can’t verify the result. The resolution remains open."
+        : result.summary;
+    }
     proof.hidden = false;
     document.querySelector("#proof-data").textContent = JSON.stringify(result, null, 2);
-    message.textContent = status === "VERIFIED" ? "Resolved with independent proof." : "Still waiting for proof.";
+    message.textContent = status === "VERIFIED"
+      ? "Resolved with independent proof."
+      : status === "NOT_COMPLETED"
+        ? "Not completed; independent evidence shows the requested outcome did not happen."
+        : "Still awaiting enough proof; the resolution remains open.";
  } catch (error) { confirmation.textContent = "The local simulation could not be completed; no production subscription action was taken."; message.textContent = error.message; }
   finally { buttons.forEach((button) => { button.disabled = false; }); }
 }
 document.querySelector("#run").addEventListener("click", () => run("persistent_resolution"));
 document.querySelector("#failure").addEventListener("click", () => run("terminal_failure"));
 document.querySelector("#outage").addEventListener("click", () => run("evidence_outage"));
+document.querySelector("#recovery").addEventListener("click", () => run("recovery_loop"));
+document.querySelector("#violation").addEventListener("click", () => run("outcome_violation"));
 </script>
 </body>
 </html>

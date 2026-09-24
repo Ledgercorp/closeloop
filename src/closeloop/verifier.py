@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 import re
 
 from .models import (
@@ -8,6 +8,7 @@ from .models import (
     ResolutionVerdict,
     VerificationResult,
 )
+from .outcomes import OutcomeViolation
 
 
 MAX_EVIDENCE_AGE_SECONDS = 30
@@ -69,11 +70,51 @@ def verify_cancellation(
     terminal_failure: bool = False,
     expected_target_digest: str | None = None,
     expected_attempt_id: str | None = None,
+    outcome_violation: OutcomeViolation | None = None,
+    expected_owner_id: str | None = None,
+    expected_resolution_id: str | None = None,
+    outcome_deadline_at: datetime | None = None,
+    verification_time: datetime | None = None,
 ) -> VerificationResult:
     """Deterministically verify whether subscription cancellation is proven.
 
     Important: provider-reported success is never sufficient for PASS.
     """
+
+    if outcome_violation is not None:
+        valid_violation = (
+            outcome_violation.event_type == "renewal_charge"
+            and outcome_violation.amount_cents > 0
+            and outcome_violation.currency in {"USD", "CAD", "GBP", "EUR"}
+            and outcome_violation.source in {"demo_billing_readback", "independent_billing_readback"}
+            and bool(outcome_violation.evidence_id)
+            and expected_owner_id is not None
+            and outcome_violation.owner_id == expected_owner_id
+            and expected_resolution_id is not None
+            and outcome_violation.resolution_id == expected_resolution_id
+            and expected_target_digest is not None
+            and outcome_violation.target_digest == expected_target_digest
+            and outcome_deadline_at is not None
+            and outcome_violation.observed_at >= outcome_deadline_at
+            and verification_time is not None
+            and outcome_violation.observed_at <= verification_time
+            and verification_time - outcome_violation.observed_at <= timedelta(days=7)
+        )
+        if valid_violation:
+            return VerificationResult(
+                verdict=ResolutionVerdict.FAIL,
+                consumer_state=ConsumerState.NOT_COMPLETED,
+                reason="A renewal charge was independently observed after the requested cancellation deadline.",
+                action_receipt=receipt,
+                evidence=evidence,
+            )
+        return VerificationResult(
+            verdict=ResolutionVerdict.INCONCLUSIVE,
+            consumer_state=ConsumerState.AWAITING_PROOF,
+            reason="Outcome-violation evidence did not correlate to this owner, resolution, target, or deadline.",
+            action_receipt=receipt,
+            evidence=evidence,
+        )
 
     if not is_valid_cancellation_evidence(evidence):
         return VerificationResult(

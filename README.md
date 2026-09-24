@@ -1,12 +1,12 @@
 # CloseLoop
 
-**CloseLoop lets you hand Alexa+ a consequential task and keeps responsibility for it until the real-world outcome can actually be verified.**
+**CloseLoop is an outcome manager for Alexa+: it keeps responsibility for consequential requests until the real-world outcome is verified, then helps the user recover safely when reality does not cooperate.**
 
-> Alexa+ can take the action. CloseLoop makes sure the outcome actually happened.
+> Ask Alexa to handle it. CloseLoop keeps watch until it is done with proof.
 
 A provider receipt is a claim, not proof. CloseLoop preserves the request, confirmation, action claim, independent evidence, verification history, and follow-up schedule until the resolution has a justified outcome.
 
-Subscription cancellation is the implemented workflow. Refunds, returns, warranty claims, service requests, and appointments are represented as future resolution types, not implemented integrations.
+Subscription cancellation is the only executable provider workflow. The bounded intent interpreter persists a cancellation outcome contract; a deterministic attention policy stores one event for an unchanged condition; separately confirmed simulated follow-up can be independently rechecked. A simulated post-deadline renewal charge produces an evidence-backed Not completed outcome and a separately confirmed refund-request draft. No refund is sent, and other task types remain roadmap. Attention delivery to Alexa is not implemented.
 
 Deterministic code owns the evidence outcomes:
 
@@ -30,9 +30,9 @@ PYTHONPATH=src uv run --no-editable uvicorn main:app \
   --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000/demo/`. The page starts at **Waiting for your confirmation**; no cancellation request is sent until you select **Confirm and play the resolution**. That runs `persistent_resolution`: accepted request, contradictory read-back, later-session retrieval, scheduled recheck, and final proof. The timeline shows the simulated next-check time. **See when proof is unavailable** exercises the outage path. `/demo/run` also offers `healthy`, `false_success`, `evidence_outage`, and `terminal_failure` scenarios.
+Open `http://127.0.0.1:8000/demo/`. The page starts at **Waiting for your confirmation**; no cancellation request is sent until you select **Confirm cancellation**. That runs `persistent_resolution`: accepted request, contradictory read-back, later-session retrieval, scheduled recheck, and final proof. The timeline shows the simulated next-check time. **See when evidence is unavailable** exercises the outage path. The page also demonstrates `recovery_loop` and `outcome_violation` with simulated time and separate simulated consent.
 
-The server uses temporary local SQLite and a deterministic simulated provider. Browser input can select a scenario only; it cannot supply an outcome, evidence, provider, owner, or confirmation attestation. Time advancement is a demo simulation, not a scheduler. This is not live Alexa+, a production provider, or AWS. See the [demo script](docs/demo-script.md) for the recording walkthrough.
+The server uses temporary local SQLite and a deterministic simulated provider. Browser input selects only a bounded scenario; it cannot supply an outcome, evidence, provider, owner, target, or confirmation attestation. The demo simulates spoken consent at each confirmation gate and simulates time progression. Neither is a production scheduler or live integration. This is not live Alexa+, a real subscription/billing provider, or live AWS. See the [demo script](docs/demo-script.md) for the recording walkthrough.
 
 ## How it works
 
@@ -84,9 +84,9 @@ a bearer-token issuer, and a separate trusted confirmation authority. Missing pr
 authentication, or confirmation configuration fails closed. Never deploy the test or recording
 signing keys.
 
-The reconciled suite has **235 passed, 0 failed, 1 skipped** (236 collected); its browser interaction regression was skipped because Playwright is unavailable here. Security is
+The current recovery working tree has **249 passed, 0 failed, 0 skipped** with Playwright enabled. Security is
 **PARTIALLY ADVERSARIAL VERIFIED**:
-109 focused adversarial/confirmation cases cover verdict manipulation, authorization isolation,
+109 prior adversarial/confirmation cases plus the new recovery binding, replay, concurrency, outage, and deduplication tests cover verdict manipulation, authorization isolation,
 confirmation replay and tampering, lifecycle races, forged evidence, MCP abuse, UI injection,
 information leakage, and failure behavior. Seven blocking findings were fixed. See the
 [verification matrix](docs/verification-matrix.md) and [security report](docs/adversarial-security.md).
@@ -103,7 +103,7 @@ information leakage, and failure behavior. Seven blocking findings were fixed. S
 - [Build provenance](docs/build-provenance.md)
 - [Trust model](docs/trust-model.md)
 
-The canonical Vercel URL had signed-out checks on a previous release; those results predate persistent resolutions and do not verify the current build. No production behavior check has been run against the persistent-resolution release. Locally, /demo/ is the persistent resolution simulation and /demo/run accepts only a bounded scenario selector. The production MCP endpoint remains bearer-authenticated. The demo uses isolated temporary state and a simulated provider; no live Alexa+, provider, AWS, production storage, OAuth, confirmation authority, or scheduler is claimed.
+The reconciled persistent-resolution deployment at `e38bff72616faaa536bdccbf72419a26fdc6c77f` was exercised signed out at `/demo/`: all three outcomes returned their expected lifecycle/verdict pair, widths 390/820/1280 had no horizontal overflow, and Chromium reported no page errors. That verifies only the pre-recovery release. The current recovery evolution is locally verified but not yet deployed. Locally, `/demo/run` accepts only a bounded scenario selector. The production MCP endpoint remains bearer-authenticated. The demo uses isolated temporary state and a simulated provider; no live Alexa+, provider, AWS, production storage, OAuth, confirmation authority, Alexa notification delivery, or scheduler is claimed.
 
 ## Provenance and license
 

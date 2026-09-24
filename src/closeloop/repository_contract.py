@@ -33,6 +33,13 @@ from .models import (
     VerificationResult,
     demo_resource_identity,
 )
+from .outcomes import (
+    AttentionEvent,
+    OutcomeContract,
+    OutcomeViolation,
+    RecoveryAction,
+    recovery_action_digest,
+)
 from .verifier import verify_cancellation
 
 
@@ -60,7 +67,16 @@ def iso(value: datetime) -> str:
     return normalized.isoformat().replace("+00:00", "Z")
 
 
-def _attempts_from_mapping(value: Any, max_checks: int = 4) -> list[VerificationAttempt]:
+def _attempts_from_mapping(
+    value: Any,
+    max_checks: int = 4,
+    *,
+    outcome_violations: list[OutcomeViolation] | None = None,
+    outcome_contract: OutcomeContract | None = None,
+    owner_id: str | None = None,
+    resolution_id: str | None = None,
+    target_digest: str | None = None,
+) -> list[VerificationAttempt]:
     if value is None:
         return []
     if not isinstance(value, list):
@@ -100,12 +116,24 @@ def _attempts_from_mapping(value: Any, max_checks: int = 4) -> list[Verification
             > checked_at
         ):
             raise ValueError("terminal failure check occurred before its bounded window")
+        violation_id = _optional_str(item.get("outcome_violation_id"), "outcome_violation_id")
+        violation = next(
+            (entry for entry in (outcome_violations or []) if entry.violation_id == violation_id),
+            None,
+        )
+        if violation_id is not None and violation is None:
+            raise ValueError("verification attempt references unknown outcome violation")
         result = verify_cancellation(
             receipt,
             evidence,
             terminal_failure=terminal_failure_eligible and check_count >= max_checks,
             expected_target_digest=receipt.target_digest,
             expected_attempt_id=_optional_str(item.get("attempt_id"), "attempt_id"),
+            outcome_violation=violation,
+            expected_owner_id=owner_id,
+            expected_resolution_id=resolution_id,
+            outcome_deadline_at=outcome_contract.deadline_at if outcome_contract else None,
+            verification_time=checked_at,
         )
         if (
             result.verdict.value != _required_str(item, "verdict")
@@ -121,6 +149,7 @@ def _attempts_from_mapping(value: Any, max_checks: int = 4) -> list[Verification
                 attempt_id=_optional_str(item.get("attempt_id"), "attempt_id") or "",
                 check_count=check_count,
                 terminal_failure_eligible=terminal_failure_eligible,
+                outcome_violation_id=violation_id,
             )
         )
     return attempts
@@ -145,6 +174,33 @@ def validate_target_record(record: ResolutionRecord) -> None:
     expected_demo_target = demo_resource_identity(record.owner_id)
     if record.target != expected_demo_target:
         raise InvalidTransitionError("resolution target identity is invalid")
+    if record.outcome_contract is not None and (
+        record.outcome_contract.target_digest != record.target.target_digest
+        or record.outcome_contract.resolution_type != record.resolution_type.value
+    ):
+        raise InvalidTransitionError("outcome contract does not match its resolution target or type")
+    for event in record.attention_events:
+        if event.owner_id != record.owner_id or event.resolution_id != record.resolution_id or event.target_digest != record.target.target_digest:
+            raise InvalidTransitionError("attention event is not bound to its resolution")
+    for action in record.recovery_actions:
+        if (
+            action.owner_id != record.owner_id
+            or action.resolution_id != record.resolution_id
+            or action.target_digest != record.target.target_digest
+            or action.action_digest != recovery_action_digest(
+                recovery_id=action.recovery_id,
+                owner_id=action.owner_id,
+                resolution_id=action.resolution_id,
+                target_digest=action.target_digest,
+                action_type=action.action_type,
+                reason=action.reason,
+                expires_at=action.expires_at,
+            )
+        ):
+            raise InvalidTransitionError("recovery action is not bound to its resolution")
+    for violation in record.outcome_violations:
+        if violation.owner_id != record.owner_id or violation.resolution_id != record.resolution_id or violation.target_digest != record.target.target_digest:
+            raise InvalidTransitionError("outcome violation is not bound to its resolution")
     if (
         type(record.max_checks) is not int
         or not 1 <= record.max_checks <= MAX_VERIFICATION_CHECKS
@@ -362,11 +418,27 @@ def validate_target_record(record: ResolutionRecord) -> None:
                 and record.check_count >= record.max_checks
             ),
             expected_target_digest=record.target.target_digest if record.target else None,
-            expected_attempt_id=(
-                record.verification_history[-1].attempt_id
-                if record.verification_history
-                else None
-            ),
+        expected_attempt_id=(
+            record.verification_history[-1].attempt_id
+            if record.verification_history
+            else None
+        ),
+        outcome_violation=(
+            next(
+                (item for item in record.outcome_violations if item.violation_id == record.verification_history[-1].outcome_violation_id),
+                None,
+            )
+            if record.verification_history and record.verification_history[-1].outcome_violation_id
+            else None
+        ),
+        expected_owner_id=record.owner_id,
+        expected_resolution_id=record.resolution_id,
+        outcome_deadline_at=(record.outcome_contract.deadline_at if record.outcome_contract else None),
+        verification_time=(
+            record.verification_history[-1].checked_at
+            if record.verification_history
+            else record.verified_at
+        ),
         )
         if record.verification != computed:
             raise InvalidTransitionError(
@@ -449,6 +521,7 @@ def record_to_mapping(
                 "attempt_id": attempt.attempt_id,
                 "check_count": attempt.check_count,
                 "terminal_failure_eligible": attempt.terminal_failure_eligible,
+                "outcome_violation_id": attempt.outcome_violation_id,
                 "evidence": {
                     "account_readable": attempt.evidence.account_readable,
                     "auto_renew": attempt.evidence.auto_renew,
@@ -470,6 +543,10 @@ def record_to_mapping(
             for attempt in record.verification_history
         ],
         "version": record.version,
+        "outcome_contract": record.outcome_contract.to_mapping() if record.outcome_contract else None,
+        "attention_events": [event.to_mapping() for event in record.attention_events],
+        "recovery_actions": [action.to_mapping() for action in record.recovery_actions],
+        "outcome_violations": [violation.to_mapping() for violation in record.outcome_violations],
     }
 
 
@@ -574,6 +651,12 @@ def record_from_mapping(mapping: Mapping[str, Any]) -> ResolutionRecord:
         max_checks = _optional_int(mapping.get("max_checks"), "max_checks")
         if max_checks is None:
             max_checks = MAX_VERIFICATION_CHECKS
+        contract_data = _optional_mapping(mapping.get("outcome_contract"), "outcome_contract")
+        outcome_contract = OutcomeContract.from_mapping(contract_data) if contract_data else None
+        outcome_violations = [
+            OutcomeViolation.from_mapping(_required_mapping(item, "outcome violation"))
+            for item in _optional_list(mapping.get("outcome_violations"), "outcome_violations")
+        ]
         record = ResolutionRecord(
             resolution_id=_required_str(mapping, "resolution_id"),
             owner_id=owner_id,
@@ -609,7 +692,24 @@ def record_from_mapping(mapping: Mapping[str, Any]) -> ResolutionRecord:
             verification_history=_attempts_from_mapping(
                 mapping.get("verification_history"),
                 max_checks,
+                outcome_violations=outcome_violations,
+                outcome_contract=outcome_contract,
+                owner_id=owner_id,
+                resolution_id=_required_str(mapping, "resolution_id"),
+                target_digest=target.target_digest,
             ),
+            outcome_contract=(
+                outcome_contract
+            ),
+            attention_events=[
+                AttentionEvent.from_mapping(_required_mapping(item, "attention event"))
+                for item in _optional_list(mapping.get("attention_events"), "attention_events")
+            ],
+            recovery_actions=[
+                RecoveryAction.from_mapping(_required_mapping(item, "recovery action"))
+                for item in _optional_list(mapping.get("recovery_actions"), "recovery_actions")
+            ],
+            outcome_violations=outcome_violations,
             version=int(version),
         )
         validate_target_record(record)
@@ -659,6 +759,14 @@ def _required_mapping(value: object, field: str) -> Mapping[str, Any]:
 
 def _optional_mapping(value: object, field: str) -> Mapping[str, Any] | None:
     return None if value is None else _required_mapping(value, field)
+
+
+def _optional_list(value: object, field: str) -> list[object]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"stored {field} must be a list")
+    return value
 
 
 def _required_str(

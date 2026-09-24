@@ -71,6 +71,9 @@ def test_public_demo_runs_real_server_lifecycle(
     assert result["verification"]["verdict"] == verdict
     assert result["verification"]["consumer_state"] == consumer_state
     assert result["resolution"]["lifecycle_state"] == lifecycle_state
+    if lifecycle_state == "VERIFIED":
+        assert result["resolution"]["resolution_receipt"]["outcome"] == "Canceled"
+        assert result["resolution"]["resolution_receipt"]["effective_end_date"]
     assert result["execution_claim"]["provider_reported_success"] is True
     assert result["summary"]
     if scenario == "false_success":
@@ -152,6 +155,8 @@ def test_persistent_demo_retrieves_and_resolves_same_record_in_later_session():
     assert scenes[3]["next_check_at"]
     assert scenes[3]["resolution_id"] == scenes[4]["resolution_id"]
     assert result["resolution"]["lifecycle_state"] == "VERIFIED"
+    assert result["resolution"]["resolution_receipt"]["effective_end_date"] == "2026-10-03"
+    assert result["resolution"]["resolution_receipt"]["title"] == "StreamBox"
     assert result["independent_read_back"]["auto_renew"] is False
     assert result["independent_read_back"]["effective_end_date"] == "2026-10-03"
     assert result["disclosure"]["live_aws"] is False
@@ -175,7 +180,7 @@ def test_demo_homepage_leads_with_resolution_story():
     assert response.status_code == 200
     assert "Alexa+ · persistent resolution" in response.text
     assert "Waiting for your confirmation. No cancellation request has been sent." in response.text
-    assert "Confirm and play the resolution" in response.text
+    assert "Confirm cancellation" in response.text
     assert "/demo/run" in response.text
 
 
@@ -323,6 +328,7 @@ def test_public_demo_response_is_explicit_and_contains_no_capability_material():
         "executing_at",
         "verifying_at",
         "completed_at",
+        "resolution_receipt",
     }
     serialized = response.text.lower()
     for forbidden in (
@@ -404,12 +410,12 @@ def test_primary_resolution_demo_has_consumer_flows_and_discloses_simulation():
         Path(__file__).parents[1] / "src" / "closeloop" / "public_demo" / "resolution.html"
     ).read_text(encoding="utf-8")
 
-    assert "Alexa, cancel StreamBox before Friday" in page
+    assert "Alexa, cancel StreamBox before next Friday" in page
     assert 'id="run"' in page
     assert 'id="failure"' in page
     assert 'id="outage"' in page
     assert 'id="proof"' in page
-    assert "Local simulation" in page
+    assert "Isolated simulation" in page
     assert "DecompressionStream" not in page
 
 
@@ -471,3 +477,28 @@ def test_polished_browser_bundle_only_requests_scenario_and_has_no_verifier_logi
     assert 'scene.lifecycle_state.replaceAll("_", " ")' not in bundle
     assert 'confirmation.textContent = "Confirmation recorded for this isolated simulation."' in bundle
     assert 'confirmation.textContent = "The local simulation could not be completed;' in bundle
+
+
+@pytest.mark.parametrize(
+    ("scenario", "verdict", "state"),
+    [("recovery_loop", "PASS", "VERIFIED"), ("outcome_violation", "FAIL", "NOT_COMPLETED")],
+)
+def test_public_demo_recovery_and_outcome_violation_use_real_lifecycle(scenario, verdict, state):
+    result = PublicDemoRunner().run(scenario)
+    scenes = [scene["scene"] for scene in result.lifecycle_story]
+    assert result.verification.verdict == verdict
+    assert result.resolution.lifecycle_state == state
+    assert "RECOVERY_CONFIRMATION" in scenes
+    assert result.lifecycle_story[2]["lifecycle_state"] == "AWAITING_PROOF"
+    assert all(
+        scene.get("simulation") is True
+        for scene in result.lifecycle_story
+        if scene["scene"] == "TIME_PASSES"
+    )
+    if scenario == "recovery_loop":
+        assert scenes[-2:] == ["REVERIFY", "RESOLUTION_RECEIPT"]
+        assert result.resolution.is_terminal is True
+    else:
+        assert "OUTCOME_VIOLATION" in scenes
+        assert "19.99" in result.summary
+        assert "nothing was sent" in result.summary

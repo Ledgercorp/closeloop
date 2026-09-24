@@ -10,13 +10,13 @@ The `persistent_resolution` scenario models a later session by constructing a ne
 
 ### 0:00 — Delegate
 
-Say: “Alexa, cancel StreamBox before Friday and make sure it actually happens.”
+Say: “Alexa, cancel StreamBox before next Friday and make sure I don’t get charged again.”
 
 Show the request and confirmation-required stage. State that no provider action occurs before confirmation.
 
 ### 0:25 — Accepted is not resolved
 
-Select **Confirm and play the resolution**. The provider accepts the request, but the independent account read-back still shows auto-renew enabled. Read the response:
+Select **Confirm cancellation**. The provider accepts the request, but the independent account read-back still shows auto-renew enabled. Read the response:
 
 > “StreamBox accepted the cancellation request, but auto-renew is still on. I’m not marking this resolved yet.”
 
@@ -36,7 +36,7 @@ Expand provenance to show the provider claim, both independent observations, and
 
 ### 2:05 — Preserve uncertainty
 
-Select **See when proof is unavailable**. Read-back is unavailable, so the state remains `AWAITING_PROOF`; CloseLoop does not claim completion.
+Select **See when evidence is unavailable**. Read-back is unavailable, so the state remains `AWAITING_PROOF`; CloseLoop does not claim completion.
 
 ### 2:20 — Not completed outcome
 Select **See a verified not completed outcome**. The simulation performs four bounded fresh read-backs. Auto-renew remains enabled on the final check, so the deterministic verifier returns `NOT_COMPLETED`. This result comes from independent evidence, not provider rejection.
@@ -48,3 +48,11 @@ Explain that SQL/DynamoDB repositories persist owner-scoped records, and conditi
 ## Keep visible
 
 Lead with the request, current resolution, what remains open, next check, and final answer. Keep hashes, digests, JSON, and protocol details inside **View evidence and provenance**. Never describe provider acceptance as resolution, simulated time as a production scheduler, or this local demo as live Alexa+ or AWS.
+
+## Recovery and outcome-violation scenes
+
+The consumer demo also offers two bounded scenarios. **See CloseLoop help recover** advances simulated time to the deadline window, surfaces ACTION_NEEDED from fresh enabled-state evidence, shows a new confirmation bound to `prepare_support_followup`, records the simulated provider receipt, then independently rechecks the same resolution and renders its persisted receipt. The simulated storyline includes the user's “Handle it” confirmation; the browser does not mint or submit a trusted attestation.
+
+**See a renewal charge after cancellation** records a simulated, deadline-bound billing read-back correlated to the same owner, resolution, and provider target. The verifier returns **Not completed** from that evidence, CloseLoop records URGENT attention, and a separately confirmed simulation prepares (but does not send) a refund-request draft. This is not bank monitoring or a real charge/refund integration.
+
+All demo timing, provider state changes, billing observations, and user confirmations are isolated simulations. No production scheduler, Alexa Proactive Events delivery, live Alexa+ session, or real customer account is exercised.

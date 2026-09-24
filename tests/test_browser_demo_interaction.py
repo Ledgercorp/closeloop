@@ -102,11 +102,15 @@ def test_persistent_demo_and_three_outcomes_in_browser(engine: str, tmp_path: Pa
     assert [(item["scenario"], item["state"], item["verdict"]) for item in report["outcomes"]] == [
         ("persistent_resolution", "VERIFIED", "PASS"),
         ("terminal_failure", "NOT_COMPLETED", "FAIL"),
+        ("recovery_loop", "VERIFIED", "PASS"),
+        ("outcome_violation", "NOT_COMPLETED", "FAIL"),
         ("evidence_outage", "AWAITING_PROOF", "INCONCLUSIVE"),
     ]
     assert [post["body"] for post in report["posts"]] == [
         '{"scenario":"persistent_resolution"}',
         '{"scenario":"terminal_failure"}',
+        '{"scenario":"recovery_loop"}',
+        '{"scenario":"outcome_violation"}',
         '{"scenario":"evidence_outage"}',
     ]
     assert all(post["method"] == "POST" for post in report["posts"])

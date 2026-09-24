@@ -76,6 +76,10 @@ _resolutions = Table(
     Column("resolution_reason", Text),
     Column("verification_history", JSON),
     Column("version", Integer, nullable=False),
+    Column("outcome_contract", JSON),
+    Column("attention_events", JSON),
+    Column("recovery_actions", JSON),
+    Column("outcome_violations", JSON),
 )
 
 
@@ -168,11 +172,17 @@ class SqlResolutionRepository:
                     raise ConcurrentResolutionUpdateError(
                         f"resolution changed on another instance: {record.resolution_id}"
                     )
-                if LifecycleState(current["state"]) not in allowed_previous_states(record.state):
+                current_state = LifecycleState(current["state"])
+                same_state_update = current_state is record.state
+                if not same_state_update and current_state not in allowed_previous_states(record.state):
                     raise InvalidTransitionError(
                         f"transition {current['state']} -> {record.state.value} is not allowed"
                     )
-                if current["state_history"] != expected_history:
+                target_history = record_to_mapping(record)["state_history"]
+                valid_history = current["state_history"] == expected_history
+                if same_state_update:
+                    valid_history = valid_history or current["state_history"] == target_history
+                if not valid_history:
                     raise ConcurrentResolutionUpdateError(
                         f"resolution history changed: {record.resolution_id}"
                     )
@@ -254,6 +264,10 @@ class SqlResolutionRepository:
                     ("resolved_at", "TIMESTAMP WITH TIME ZONE"),
                     ("resolution_reason", "TEXT"),
                     ("verification_history", "JSON"),
+                    ("outcome_contract", "JSON"),
+                    ("attention_events", "JSON"),
+                    ("recovery_actions", "JSON"),
+                    ("outcome_violations", "JSON"),
                 ):
                     if name not in present:
                         try:
@@ -296,14 +310,15 @@ def _owned_transition_update(
     equality operator.
     """
 
+    previous_states = allowed_previous_states(next_state)
+    if next_state not in TERMINAL_STATES:
+        previous_states = previous_states | {next_state}
     return update(_resolutions).where(
         _resolutions.c.resolution_id == resolution_id,
         _resolutions.c.owner_id == owner_id,
         _resolutions.c.version == expected_version,
         _resolutions.c.state.not_in([state.value for state in TERMINAL_STATES]),
-        _resolutions.c.state.in_(
-            [state.value for state in allowed_previous_states(next_state)]
-        ),
+        _resolutions.c.state.in_([state.value for state in previous_states]),
     )
 
 

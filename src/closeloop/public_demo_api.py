@@ -25,14 +25,15 @@ from .confirmation import (
 from .demo_provider import DemoProvider
 from .lifecycle import ResolutionService
 from .models import ActionReceipt, CancellationEvidence, ResourceIdentity
+from .outcomes import OutcomeViolation, RecoveryAction
 from .repository import SqlResolutionRepository
 
 
 PUBLIC_DEMO_RESULT_SCHEMA = "closeloop.public-demo-result/v2"
 PUBLIC_DEMO_SCENARIOS = frozenset(
-    {"healthy", "false_success", "evidence_outage", "persistent_resolution", "terminal_failure"}
+    {"healthy", "false_success", "evidence_outage", "persistent_resolution", "terminal_failure", "recovery_loop", "outcome_violation"}
 )
-PUBLIC_DEMO_INTENT = "Cancel StreamBox before Friday and make sure it actually happens."
+PUBLIC_DEMO_INTENT = "Cancel StreamBox before next Friday and make sure I don't get charged again."
 PUBLIC_DEMO_MAX_BODY_BYTES = 96
 PUBLIC_DEMO_MAX_CONCURRENCY = 4
 PUBLIC_DEMO_TIMEOUT_SECONDS = 5.0
@@ -61,7 +62,7 @@ _PRESENTATION_NEXT_STEPS = {
     "INCONCLUSIVE": "In this simulation, the resolution stays open for a later explicit recheck.",
 }
 
-DemoScenario = Literal["healthy", "false_success", "evidence_outage", "persistent_resolution", "terminal_failure"]
+DemoScenario = Literal["healthy", "false_success", "evidence_outage", "persistent_resolution", "terminal_failure", "recovery_loop", "outcome_violation"]
 DemoVerdict = Literal["PASS", "FAIL", "INCONCLUSIVE"]
 DemoConsumerState = Literal["Verified", "Not completed", "Awaiting proof"]
 DemoLifecycleState = Literal["VERIFIED", "NOT_COMPLETED", "AWAITING_PROOF"]
@@ -87,6 +88,7 @@ class PublicDemoResolution(_StrictResponseModel):
     executing_at: str = Field(min_length=1, max_length=64)
     verifying_at: str = Field(min_length=1, max_length=64)
     completed_at: str | None
+    resolution_receipt: dict[str, object] | None = None
 
 
 class PublicDemoExecutionClaim(_StrictResponseModel):
@@ -168,6 +170,8 @@ class PublicDemoRunner:
             raise ValueError("unsupported public demo scenario")
         if scenario == "persistent_resolution":
             return _run_persistent_resolution_demo()
+        if scenario in {"recovery_loop", "outcome_violation"}:
+            return _run_recovery_demo(scenario)
 
         owner_id = f"public-demo:{uuid4()}"
         secret = secrets.token_urlsafe(48)
@@ -342,6 +346,178 @@ def _run_persistent_resolution_demo() -> PublicDemoResult:
         )
 
 
+class _RecoveryJourneyProvider(_PersistentJourneyProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.recovery_completed = False
+        self.refund_draft_prepared = False
+
+    def read_cancellation_evidence(self, target: ResourceIdentity, attempt_id: str) -> CancellationEvidence:
+        self.reads += 1
+        return CancellationEvidence(
+            account_readable=True,
+            auto_renew=not self.recovery_completed,
+            effective_end_date="2026-10-03" if self.recovery_completed else None,
+            freshness_seconds=0,
+            target_digest=target.target_digest,
+            attempt_id=attempt_id,
+        )
+
+    def execute_recovery(self, action: RecoveryAction) -> dict[str, object]:
+        if action.action_type == "prepare_support_followup":
+            self.recovery_completed = True
+            summary = "Support follow-up prepared; the simulated provider later updated the account."
+        elif action.action_type == "prepare_refund_request":
+            self.refund_draft_prepared = True
+            summary = "Refund request draft prepared. Nothing was sent."
+        else:
+            raise ValueError("unsupported simulated recovery action")
+        return {
+            "source": "demo_provider.simulated_recovery",
+            "request_id": f"recovery-{action.recovery_id}",
+            "action_digest": action.action_digest,
+            "target_digest": action.target_digest,
+            "claimed_success": True,
+            "summary": summary,
+        }
+
+
+def _run_recovery_demo(scenario: Literal["recovery_loop", "outcome_violation"]) -> PublicDemoResult:
+    owner_id = f"public-demo:{uuid4()}"
+    secret = secrets.token_urlsafe(48)
+    verifier = HmacJwtConfirmationAttestationVerifier(
+        secret=secret, issuer=_DEMO_CONFIRMATION_ISSUER, audience=_DEMO_CONFIRMATION_AUDIENCE
+    )
+    provider = _RecoveryJourneyProvider()
+    story: list[dict[str, object]] = []
+    with TemporaryDirectory(prefix="closeloop-recovery-demo-") as directory:
+        database = Path(directory) / "resolution.db"
+        repository = SqlResolutionRepository(f"sqlite+pysqlite:///{database}")
+        service = ResolutionService(
+            repository=repository,
+            provider_factory=lambda _mode: provider,
+            confirmation_verifier=verifier,
+            recovery_provider=provider,
+        )
+        started = service.start_resolution(owner_id, PUBLIC_DEMO_INTENT, "false_success")
+        resolution_id = str(started["resolution_id"])
+        service.confirm_resolution_action(
+            owner_id,
+            resolution_id,
+            True,
+            _mint_ephemeral_demo_confirmation(started=started, owner_id=owner_id, secret=secret),
+        )
+        status = service.get_resolution_status(owner_id, resolution_id)
+        record = repository.get_owned(resolution_id, owner_id)
+        contract = record.outcome_contract
+        if contract is None or contract.deadline_at is None or record.target is None:
+            raise ValueError("demo request did not produce a bounded outcome contract")
+        story.extend(
+            [
+                {"scene": "NORMAL_REQUEST", "utterance": PUBLIC_DEMO_INTENT, "lifecycle_state": "AWAITING_CONFIRMATION"},
+                {"scene": "ORIGINAL_ACTION", "summary": "The cancellation request was sent once and the provider accepted it."},
+                {"scene": "FALSE_SUCCESS", "lifecycle_state": status["lifecycle_state"], "summary": status["open_loop_summary"]},
+            ]
+        )
+
+        if scenario == "recovery_loop":
+            attention_time = max(
+                datetime.now(timezone.utc) + timedelta(minutes=10),
+                contract.deadline_at - timedelta(hours=5),
+            )
+            status = service.recheck_resolution(owner_id, resolution_id, now=attention_time, force=True)
+            proposal = status.get("recovery_proposal")
+            if not isinstance(proposal, dict) or status["attention"].get("level") not in {"ACTION_NEEDED", "URGENT"}:
+                raise ValueError("fresh evidence and deadline policy did not justify recovery")
+            story.extend(
+                [
+                    {"scene": "TIME_PASSES", "simulation": True, "summary": "Simulated time advances toward renewal."},
+                    {"scene": "ACTION_NEEDED", "attention": status["attention"], "recovery_proposal": proposal},
+                    {"scene": "RECOVERY_CONFIRMATION", "utterance": "Handle it.", "summary": "A new signed confirmation is bound to this exact follow-up."},
+                ]
+            )
+            recovery_time = attention_time + timedelta(seconds=30)
+            recovery_attestation = _mint_ephemeral_action_confirmation(
+                owner_id=owner_id, resolution_id=resolution_id, action=str(proposal["action_type"]),
+                action_digest=str(proposal["provenance"]["action_digest"]), secret=secret, now=recovery_time,
+            )
+            status = service.confirm_recovery_action(
+                owner_id, resolution_id, str(proposal["recovery_id"]), confirmed=True,
+                confirmation_attestation=recovery_attestation, now=recovery_time,
+            )
+            story.append({"scene": "RECOVERY_EXECUTED", "recovery_actions": status["recovery_actions"]})
+            due = datetime.fromisoformat(str(status["next_check_at"]).replace("Z", "+00:00"))
+            status = service.recheck_resolution(
+                owner_id, resolution_id, scheduled_for=due,
+                now=max(due, recovery_time),
+            )
+            story.extend(
+                [
+                    {"scene": "REVERIFY", "lifecycle_state": status["lifecycle_state"], "summary": status["open_loop_summary"]},
+                    {"scene": "RESOLUTION_RECEIPT", "receipt": status["resolution_receipt"]},
+                ]
+            )
+        else:
+            observed_at = contract.deadline_at + timedelta(minutes=1)
+            violation_now = observed_at + timedelta(minutes=1)
+            violation = OutcomeViolation(
+                violation_id=str(uuid4()), owner_id=owner_id, resolution_id=resolution_id,
+                target_digest=record.target.target_digest, event_type="renewal_charge",
+                amount_cents=1999, currency="USD", source="demo_billing_readback",
+                evidence_id=f"demo-billing-{uuid4()}", observed_at=observed_at,
+            )
+            status = service.record_outcome_violation(owner_id, resolution_id, violation, now=violation_now)
+            proposal = status.get("recovery_proposal")
+            if not isinstance(proposal, dict) or status["attention"].get("level") != "URGENT":
+                raise ValueError("outcome violation did not create urgent attention and a recovery proposal")
+            story.extend(
+                [
+                    {"scene": "OUTCOME_VIOLATION", "evidence": violation.to_mapping(), "summary": status["open_loop_summary"]},
+                    {"scene": "URGENT_ATTENTION", "attention": status["attention"], "recovery_proposal": proposal},
+                    {"scene": "RECOVERY_CONFIRMATION", "utterance": "Prepare the refund request.", "summary": "Separate confirmation required; this only prepares a draft."},
+                ]
+            )
+            recovery_time = violation_now + timedelta(minutes=1)
+            recovery_attestation = _mint_ephemeral_action_confirmation(
+                owner_id=owner_id, resolution_id=resolution_id, action=str(proposal["action_type"]),
+                action_digest=str(proposal["provenance"]["action_digest"]), secret=secret, now=recovery_time,
+            )
+            service.confirm_recovery_action(
+                owner_id, resolution_id, str(proposal["recovery_id"]), confirmed=True,
+                confirmation_attestation=recovery_attestation, now=recovery_time,
+            )
+            due = datetime.fromisoformat(str(status["next_check_at"]).replace("Z", "+00:00"))
+            status = service.recheck_resolution(
+                owner_id, resolution_id, scheduled_for=due,
+                now=max(due, recovery_time),
+            )
+            story.extend(
+                [
+                    {"scene": "REFUND_DRAFT_PREPARED", "recovery_actions": status["recovery_actions"]},
+                    {"scene": "OUTCOME_EVALUATED", "lifecycle_state": status["lifecycle_state"], "summary": status["open_loop_summary"]},
+                ]
+            )
+
+        evidence = service.get_resolution_evidence(owner_id, resolution_id)
+        return _presentation_result(scenario, status, evidence, lifecycle_story=story)
+
+
+def _mint_ephemeral_action_confirmation(
+    *, owner_id: str, resolution_id: str, action: str, action_digest: str, secret: str, now: datetime
+) -> str:
+    return jwt.encode(
+        {
+            "iss": _DEMO_CONFIRMATION_ISSUER, "aud": _DEMO_CONFIRMATION_AUDIENCE,
+            "confirmation_contract": CONFIRMATION_CONTRACT_VERSION, "sub": owner_id,
+            "resolution_id": resolution_id, "action": action, "action_digest": action_digest,
+            "confirmed": True, "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(seconds=30)).timestamp()), "jti": str(uuid4()),
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+
 def _mint_ephemeral_demo_confirmation(
     *,
     started: dict[str, object],
@@ -416,6 +592,7 @@ def _presentation_result(
             "executing_at": _transition_time(evidence, "EXECUTING"),
             "verifying_at": _transition_time(evidence, "VERIFYING"),
             "completed_at": status["resolved_at"],
+            "resolution_receipt": status.get("resolution_receipt"),
         },
         "execution_claim": {
             "source": execution["source"],
@@ -440,16 +617,22 @@ def _presentation_result(
             "evaluated_at": verification["evaluated_at"],
         },
         "summary": (
+            str(status["open_loop_summary"])
+            if status.get("outcome_violations")
+            else (
             "The cancellation request was accepted, but auto-renew is still on. "
             "CloseLoop is not marking this resolved yet."
             if verification["verdict"] == "INCONCLUSIVE"
             and read_back["account_readable"] is True
             and read_back["auto_renew"] is True
             else _PRESENTATION_SUMMARIES[str(verification["verdict"])]
+            )
         ),
-        "recommended_next_step": _PRESENTATION_NEXT_STEPS[
-            str(verification["verdict"])
-        ],
+        "recommended_next_step": (
+            "Review the refund request draft; nothing has been sent."
+            if status.get("outcome_violations")
+            else _PRESENTATION_NEXT_STEPS[str(verification["verdict"])]
+        ),
         "disclosure": {
             "provider": "deterministic simulated subscription provider",
             "confirmation": (
